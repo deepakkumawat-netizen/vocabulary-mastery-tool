@@ -11,8 +11,29 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
   const [topic, setTopic] = useState('')
   const [grade, setGrade] = useState('7th Grade Students')
   const [activeTab, setActiveTab] = useState(null)
+  const [additionalContext, setAdditionalContext] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [standardsText, setStandardsText] = useState('')
+  const [fileStatus, setFileStatus] = useState('')
 
   const hasContent = topic.length > 0 || objective.length > 0
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setFileStatus('Uploading…')
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/rag/add-file', { method: 'POST', body: fd })
+      const data = await res.json()
+      setFileStatus(`✓ ${file.name} added (${data.chars_indexed} chars indexed)`)
+      setAdditionalContext(`Reference file: ${file.name}`)
+    } catch (err) {
+      setFileStatus(`Upload failed: ${err.message}`)
+    }
+  }
 
   const handleGenerate = () => {
     if (!objective.trim() && !topic.trim()) return
@@ -20,6 +41,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
       topic: topic.trim(),
       grade_level: parseInt(grade),
       learning_objective: objective.trim(),
+      additional_context: additionalContext || undefined,
     })
   }
 
@@ -28,20 +50,24 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
     setTopic('Short phrases focusing on long-vowel CVCe words (e.g., make, ride, hope) and common Grade 2 irregular words (e.g., said, does, were)')
   }
 
-  const gradeNum = parseInt(grade)
+  const handleEnhance = () => {
+    if (!objective.trim() && !topic.trim()) return
+    if (objective.trim()) {
+      setObjective(`${objective.trim()} Students will apply context clues and morphemic analysis to determine word meanings.`)
+    }
+  }
+
+  const toggleTab = (tab) => setActiveTab(activeTab === tab ? null : tab)
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#FAF9F7' }}>
-      {/* Back nav */}
       <div className="px-6 pt-5 pb-2">
         <button onClick={onBack} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">
           ← Back
         </button>
       </div>
 
-      {/* Center content */}
       <div className="flex-1 flex flex-col items-center px-4 pb-32">
-        {/* Header */}
         <div className="text-center mb-8 mt-4">
           <h1 className="text-3xl font-extrabold text-gray-900">
             Let's finalize your{' '}
@@ -54,9 +80,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
 
         <div className="w-full max-w-2xl space-y-3">
 
-          {/* Card 1 — Objective + Topic */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            {/* Learning Objective */}
             <div className="mb-4">
               <label className="flex items-center gap-1 text-sm font-semibold text-gray-700 mb-1.5">
                 Learning Objective
@@ -72,7 +96,6 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
               />
             </div>
 
-            {/* Topic or Main Idea */}
             <div className="mb-4">
               <label className="flex items-center gap-1 text-sm font-semibold text-gray-700 mb-1.5">
                 Topic or Main Idea
@@ -92,12 +115,11 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
               </div>
             </div>
 
-            {/* Attachment tabs + action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               {['File', 'Website', 'YouTube', 'Standards'].map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(activeTab === tab ? null : tab)}
+                  onClick={() => toggleTab(tab)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     activeTab === tab
                       ? 'border-orange-300 text-orange-600 bg-orange-50'
@@ -115,7 +137,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
               <div className="ml-auto flex items-center gap-2">
                 {hasContent ? (
                   <button
-                    onClick={() => { setObjective(''); setTopic(''); setActiveTab(null) }}
+                    onClick={() => { setObjective(''); setTopic(''); setActiveTab(null); setAdditionalContext('') }}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50"
                   >
                     Clear All
@@ -129,14 +151,87 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
                     Use Exemplar
                   </button>
                 )}
-                <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50">
+                <button
+                  onClick={handleEnhance}
+                  disabled={!hasContent}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+                >
                   ✦ Enhance
                 </button>
               </div>
             </div>
+
+            {/* Tab panels */}
+            {activeTab === 'File' && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">Upload a PDF, DOCX, or TXT file to use as reference material for the worksheet.</p>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileUpload}
+                  className="text-xs text-gray-600"
+                />
+                {fileStatus && (
+                  <p className="text-xs mt-2" style={{ color: fileStatus.startsWith('✓') ? '#16a34a' : '#E85D04' }}>
+                    {fileStatus}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'Website' && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">Add a website URL — the AI will use it as additional context when generating the worksheet.</p>
+                <input
+                  type="url"
+                  value={websiteUrl}
+                  onChange={e => {
+                    setWebsiteUrl(e.target.value)
+                    setAdditionalContext(e.target.value ? `Website reference: ${e.target.value}` : '')
+                  }}
+                  placeholder="https://example.com/article"
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1"
+                  style={{ '--tw-ring-color': '#E85D04' }}
+                />
+              </div>
+            )}
+
+            {activeTab === 'YouTube' && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">Add a YouTube video URL to align vocabulary words with video content.</p>
+                <input
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={e => {
+                    setYoutubeUrl(e.target.value)
+                    setAdditionalContext(e.target.value ? `YouTube reference: ${e.target.value}` : '')
+                  }}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1"
+                  style={{ '--tw-ring-color': '#E85D04' }}
+                />
+              </div>
+            )}
+
+            {activeTab === 'Standards' && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">Enter curriculum standards to align this worksheet (e.g., Common Core, state standards).</p>
+                <textarea
+                  value={standardsText}
+                  onChange={e => {
+                    setStandardsText(e.target.value)
+                    setAdditionalContext(e.target.value ? `Curriculum standards: ${e.target.value}` : '')
+                  }}
+                  placeholder="e.g., CCSS.ELA-LITERACY.L.7.4 — Determine the meaning of unknown words using context clues..."
+                  rows={3}
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none resize-none focus:ring-1"
+                  style={{ '--tw-ring-color': '#E85D04' }}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Card 2 — Reading Level */}
+          {/* Reading Level */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Reading Level</label>
             <div className="relative">
@@ -161,7 +256,6 @@ export default function FormPage({ onGenerate, onBack, loading, error, streamSta
         </div>
       </div>
 
-      {/* Sticky bottom bar — matches Screenshot 2 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-3">
