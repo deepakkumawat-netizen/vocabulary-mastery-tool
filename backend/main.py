@@ -250,30 +250,11 @@ Generate a complete vocabulary mastery worksheet. Return ONLY valid JSON with th
                 )
                 continue
 
-            yield _sse({"type": "status", "message": "Checking readability grade…"})
-
-            sample = " ".join(w["definition"] for w in data.get("vocab_words", []))
-            readability = analyze_text_grade(sample)
-            fk_grade = readability.get("flesch_kincaid_grade", req.grade_level)
-
-            if abs(fk_grade - req.grade_level) > 3:
-                last_reason = (
-                    f"Readability FK grade {fk_grade:.1f} is more than 3 levels away "
-                    f"from target grade {req.grade_level}"
-                )
-                extra_instructions = (
-                    f"IMPORTANT: Your definitions had a Flesch-Kincaid grade of {fk_grade:.1f} "
-                    f"but the target is grade {req.grade_level}. "
-                    "Adjust vocabulary complexity so FK grade is within 3 of the target.\n"
-                )
-                continue
-
             # All checks passed — save and emit complete event
             yield _sse({"type": "status", "message": "Saving worksheet…"})
 
             full_content = {
                 **data,
-                "readability_metrics": readability,
                 "rag_context_used": bool(rag_context),
             }
 
