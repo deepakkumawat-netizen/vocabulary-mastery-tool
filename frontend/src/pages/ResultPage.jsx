@@ -106,8 +106,6 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
             <div
               ref={contentRef}
               className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
-              contentEditable
-              suppressContentEditableWarning
             >
               {/* Title */}
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
