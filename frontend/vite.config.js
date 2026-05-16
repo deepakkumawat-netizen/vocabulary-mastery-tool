@@ -7,5 +7,14 @@ export default defineConfig({
     port: 3002,
     proxy: { '/api': 'http://localhost:8002', '/mcp': 'http://localhost:8002' }
   },
-  build: { outDir: 'dist' }
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/index.js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      }
+    }
+  }
 })
