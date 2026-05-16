@@ -6,7 +6,7 @@ const GRADE_LEVELS = [
   '9th Grade Students', '10th Grade Students', '11th Grade Students', '12th Grade Students'
 ]
 
-export default function FormPage({ onGenerate, onBack, loading, error }) {
+export default function FormPage({ onGenerate, onBack, loading, error, streamStatus }) {
   const [objective, setObjective] = useState('')
   const [topic, setTopic] = useState('')
   const [grade, setGrade] = useState('7th Grade Students')
@@ -184,9 +184,16 @@ export default function FormPage({ onGenerate, onBack, loading, error }) {
               )}
             </button>
           </div>
-          <p className="text-center text-xs text-gray-400 mt-2">
-            AI can make mistakes. Always review content before using in the classroom. ⓘ
-          </p>
+          {loading && streamStatus && (
+            <p className="text-center text-xs mt-2" style={{ color: '#E85D04' }}>
+              {streamStatus}
+            </p>
+          )}
+          {!loading && (
+            <p className="text-center text-xs text-gray-400 mt-2">
+              AI can make mistakes. Always review content before using in the classroom. ⓘ
+            </p>
+          )}
         </div>
       </div>
     </div>

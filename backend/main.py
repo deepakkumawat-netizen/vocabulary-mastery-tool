@@ -101,6 +101,30 @@ async def list_worksheets(limit: int = 20):
 
 # ── Generate ──────────────────────────────────────────────────────────────────
 
+def _validate_vocab(data: dict) -> "str | None":
+    """Return an error description string if the worksheet JSON is invalid, else None."""
+    vocab_words = data.get("vocab_words")
+    if not isinstance(vocab_words, list) or len(vocab_words) < 8:
+        return f"vocab_words must have at least 8 items, got {len(vocab_words) if isinstance(vocab_words, list) else 'missing'}"
+
+    matching = data.get("matching_section")
+    if not isinstance(matching, dict) or not matching.get("items"):
+        return "matching_section is missing or has no items"
+
+    fib = data.get("fill_in_blank")
+    if not isinstance(fib, dict):
+        return "fill_in_blank section is missing"
+    sentences = fib.get("sentences")
+    if not isinstance(sentences, list) or len(sentences) < 5:
+        return f"fill_in_blank.sentences must have at least 5 items, got {len(sentences) if isinstance(sentences, list) else 'missing'}"
+
+    sw = data.get("sentence_writing")
+    if not isinstance(sw, dict) or not sw.get("prompts"):
+        return "sentence_writing section is missing or has no prompts"
+
+    return None
+
+
 @app.post("/api/vocabulary/generate")
 async def generate_worksheet(req: WorksheetRequest):
     session_id = req.session_id or create_session()
@@ -108,19 +132,23 @@ async def generate_worksheet(req: WorksheetRequest):
     rag_retriever.build_index()
     rag_context = rag_retriever.build_context(
         f"{req.topic} grade {req.grade_level} {req.learning_objective}",
-        grade_level=req.grade_level
+        grade_level=req.grade_level,
     )
-
     grade_ctx = get_grade_prompt_context(req.grade_level)
 
-    prompt = f"""You are an expert educator creating a Vocabulary Mastery Worksheet.
+    # Pre-compute optional blocks to avoid backslashes inside f-string expressions
+    additional_block = f"Additional Context: {req.additional_context}" if req.additional_context else ""
+    rag_block = f"\n{rag_context}" if rag_context else ""
+    ctx_block = f"{additional_block}\n{rag_block}".strip()
+
+    def _build_prompt(extra_instructions: str = "") -> str:
+        return f"""You are an expert educator creating a Vocabulary Mastery Worksheet.
 
 {grade_ctx}
 Topic: {req.topic}
 Learning Objective: {req.learning_objective}
-{f"Additional Context: {req.additional_context}" if req.additional_context else ""}
-{f"\\n{rag_context}" if rag_context else ""}
-
+{ctx_block}
+{extra_instructions}
 Generate a complete vocabulary mastery worksheet. Return ONLY valid JSON with this exact structure:
 {{
   "vocab_words": [
@@ -154,54 +182,144 @@ Generate a complete vocabulary mastery worksheet. Return ONLY valid JSON with th
   }}
 }}"""
 
-    try:
-        resp = get_groq_client().chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=3500,
-        )
+    def _sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
 
-        raw = resp.choices[0].message.content.strip()
-        for fence in ("```json", "```"):
-            if raw.startswith(fence):
-                raw = raw[len(fence):]
-        if raw.endswith("```"):
-            raw = raw[:-3]
+    def stream_gen():
+        max_attempts = 3
+        extra_instructions = ""
 
-        data = json.loads(raw.strip())
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                yield _sse({"type": "retry", "attempt": attempt, "reason": last_reason})
 
-        sample = " ".join(w["definition"] for w in data.get("vocab_words", []))
-        readability = analyze_text_grade(sample)
+            yield _sse({"type": "progress", "message": f"Attempt {attempt}: calling Groq model…"})
 
-        full_content = {**data, "readability_metrics": readability, "rag_context_used": bool(rag_context)}
+            prompt = _build_prompt(extra_instructions)
+            collected_chunks = []
 
-        worksheet_id = save_worksheet(
-            session_id=session_id,
-            topic=req.topic,
-            grade_level=req.grade_level,
-            learning_objective=req.learning_objective,
-            content=full_content,
-        )
+            try:
+                stream = get_groq_client().chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=3500,
+                    stream=True,
+                )
 
-        save_rag_document(
-            content=(
-                f"vocabulary worksheet topic {req.topic} grade {req.grade_level} "
-                f"objective {req.learning_objective} words "
-                + " ".join(w["word"] for w in data.get("vocab_words", []))
-            ),
-            doc_type="worksheet",
-            topic=req.topic,
-            grade_level=req.grade_level,
-        )
-        rag_retriever.build_index()
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content or ""
+                    if delta:
+                        collected_chunks.append(delta)
+                        yield _sse({"type": "token", "content": delta})
 
-        return {"success": True, "session_id": session_id, "worksheet_id": worksheet_id, "worksheet": full_content}
+            except Exception as exc:
+                last_reason = str(exc)
+                extra_instructions = f"IMPORTANT: Fix the following error from the previous attempt: {last_reason}\n"
+                continue
 
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            raw = "".join(collected_chunks).strip()
+            for fence in ("```json", "```"):
+                if raw.startswith(fence):
+                    raw = raw[len(fence):]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+            yield _sse({"type": "status", "message": "Parsing JSON response…"})
+
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                last_reason = f"Invalid JSON: {exc}"
+                extra_instructions = (
+                    "CRITICAL: Your previous response was not valid JSON. "
+                    "Return ONLY a raw JSON object — no markdown fences, no prose.\n"
+                )
+                continue
+
+            yield _sse({"type": "status", "message": "Validating worksheet structure…"})
+
+            validation_error = _validate_vocab(data)
+            if validation_error:
+                last_reason = f"Validation failed: {validation_error}"
+                extra_instructions = (
+                    f"IMPORTANT: Fix this validation error from your previous attempt: {validation_error}. "
+                    "Ensure vocab_words has >=8 items, matching_section is present, "
+                    "fill_in_blank has >=5 sentences, and sentence_writing has prompts.\n"
+                )
+                continue
+
+            yield _sse({"type": "status", "message": "Checking readability grade…"})
+
+            sample = " ".join(w["definition"] for w in data.get("vocab_words", []))
+            readability = analyze_text_grade(sample)
+            fk_grade = readability.get("flesch_kincaid_grade", req.grade_level)
+
+            if abs(fk_grade - req.grade_level) > 3:
+                last_reason = (
+                    f"Readability FK grade {fk_grade:.1f} is more than 3 levels away "
+                    f"from target grade {req.grade_level}"
+                )
+                extra_instructions = (
+                    f"IMPORTANT: Your definitions had a Flesch-Kincaid grade of {fk_grade:.1f} "
+                    f"but the target is grade {req.grade_level}. "
+                    "Adjust vocabulary complexity so FK grade is within 3 of the target.\n"
+                )
+                continue
+
+            # All checks passed — save and emit complete event
+            yield _sse({"type": "status", "message": "Saving worksheet…"})
+
+            full_content = {
+                **data,
+                "readability_metrics": readability,
+                "rag_context_used": bool(rag_context),
+            }
+
+            try:
+                worksheet_id = save_worksheet(
+                    session_id=session_id,
+                    topic=req.topic,
+                    grade_level=req.grade_level,
+                    learning_objective=req.learning_objective,
+                    content=full_content,
+                )
+
+                save_rag_document(
+                    content=(
+                        f"vocabulary worksheet topic {req.topic} grade {req.grade_level} "
+                        f"objective {req.learning_objective} words "
+                        + " ".join(w["word"] for w in data.get("vocab_words", []))
+                    ),
+                    doc_type="worksheet",
+                    topic=req.topic,
+                    grade_level=req.grade_level,
+                )
+                rag_retriever.build_index()
+            except Exception as exc:
+                yield _sse({"type": "error", "message": f"Database error: {exc}"})
+                return
+
+            yield _sse({
+                "type": "complete",
+                "session_id": session_id,
+                "worksheet_id": worksheet_id,
+                "worksheet": full_content,
+            })
+            return
+
+        # Exhausted all retries
+        yield _sse({"type": "error", "message": f"Failed after {max_attempts} attempts. Last error: {last_reason}"})
+
+    return StreamingResponse(
+        stream_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Export DOCX ───────────────────────────────────────────────────────────────
