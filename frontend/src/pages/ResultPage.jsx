@@ -5,12 +5,47 @@ import ExportDropdown from '../components/ExportDropdown'
 export default function ResultPage({ worksheet, formData, tabs, onNewTab, onCloseTab, api }) {
   const [activeTabIdx, setActiveTabIdx] = useState(0)
   const [activeSidebar, setActiveSidebar] = useState(null)
+  const [showAnswers, setShowAnswers] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [history, setHistory] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
   const contentRef = useRef(null)
 
+  const showToast = (msg) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
+
   const handleSidebarAction = (label) => {
-    setActiveSidebar(prev => prev === label ? null : label)
-    if (label === 'Create') { onNewTab(); setActiveSidebar(null) }
-    if (label === 'Remix')  { onNewTab(); setActiveSidebar(null) }
+    if (label === 'Create' || label === 'Adapt' || label === 'Remix') {
+      onNewTab()
+      setActiveSidebar(null)
+      setShowHistory(false)
+      return
+    }
+    if (label === 'Evaluate') {
+      setShowAnswers(a => !a)
+      setActiveSidebar(prev => prev === 'Evaluate' ? null : 'Evaluate')
+      setShowHistory(false)
+      return
+    }
+    if (label === 'Images') {
+      showToast('AI image generation coming soon!')
+      setActiveSidebar(null)
+      return
+    }
+    if (label === 'History') {
+      const next = !showHistory
+      setShowHistory(next)
+      setActiveSidebar(next ? 'History' : null)
+      if (next) {
+        fetch(`${api}/api/worksheets`)
+          .then(r => r.json())
+          .then(d => setHistory(d.worksheets || []))
+          .catch(() => setHistory([]))
+      }
+      return
+    }
   }
 
   const ws = worksheet || {}
@@ -109,17 +144,53 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
             </button>
           )
         )}
-        <div className="ml-auto text-gray-300 text-xs">
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => setShowAnswers(a => !a)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+              showAnswers
+                ? 'border-orange-300 text-orange-600 bg-orange-50'
+                : 'border-gray-200 text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            📋 {showAnswers ? 'Student View' : 'Answer Key'}
+          </button>
           {ws.rag_context_used && (
             <span className="px-2 py-0.5 rounded-full text-purple-600 bg-purple-50 font-medium">🧠 RAG</span>
           )}
         </div>
       </div>
 
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-gray-900 text-white text-sm rounded-xl shadow-lg">
+          {toast}
+        </div>
+      )}
+
       {/* Main layout: Sidebar + Document */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar onAction={handleSidebarAction} activeAction={activeSidebar} />
 
+        {/* History panel */}
+        {showHistory && (
+          <div className="w-72 border-r border-gray-200 bg-white overflow-y-auto flex-shrink-0">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-800">Session History</span>
+              <button onClick={() => { setShowHistory(false); setActiveSidebar(null) }}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+            </div>
+            {history.length === 0
+              ? <p className="px-4 py-6 text-xs text-gray-400 text-center">No worksheets generated yet this session.</p>
+              : history.map((item, i) => (
+                <div key={i} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer">
+                  <p className="text-xs font-medium text-gray-800 truncate">{item.topic || 'Untitled'}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Grade {item.grade_level} · {item.created_at || ''}</p>
+                </div>
+              ))
+            }
+          </div>
+        )}
 
         {/* Document area */}
         <div className="flex-1 overflow-y-auto px-8 py-8">
@@ -127,6 +198,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
 
             {/* Document page */}
             <div
+              key={showAnswers}
               ref={contentRef}
               contentEditable
               suppressContentEditableWarning
@@ -160,7 +232,12 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="border border-gray-200 px-3 py-2 text-gray-400">{i + 1}</td>
                         <td className="border border-gray-200 px-3 py-2 font-medium text-gray-800">{item.word}</td>
-                        <td className="border border-gray-200 px-3 py-2 text-gray-300"></td>
+                        <td className="border border-gray-200 px-3 py-2">
+                          {showAnswers
+                            ? <span className="text-amber-700 font-medium">{item.definition}</span>
+                            : <span className="text-gray-200">_______________</span>
+                          }
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -196,6 +273,11 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                     <li key={i} className="text-sm text-gray-700">
                       <span className="font-medium text-gray-400 mr-2">{i + 1}.</span>
                       {s.sentence}
+                      {showAnswers && s.answer && (
+                        <span className="ml-2 px-2 py-0.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700 font-medium">
+                          {s.answer}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ol>
