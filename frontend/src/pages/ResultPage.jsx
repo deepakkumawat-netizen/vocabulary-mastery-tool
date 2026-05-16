@@ -88,15 +88,30 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
 
       {/* Toolbar */}
       <div className="bg-white border-b border-gray-100 flex items-center gap-1 px-4 py-1.5 text-gray-400 text-xs flex-wrap">
-        {['↩', '↪', '|', 'T', '|', 'B', 'I', 'U', 'S', '|', '≡', '≡', '≡', '|', '⊞'].map((t, i) => (
-          <button key={i} className="px-1.5 py-1 rounded hover:bg-gray-100 transition-colors font-medium">
-            {t}
-          </button>
-        ))}
+        {[
+          { label: '↩', cmd: () => document.execCommand('undo'), title: 'Undo' },
+          { label: '↪', cmd: () => document.execCommand('redo'), title: 'Redo' },
+          { label: '|', cmd: null },
+          { label: 'B', cmd: () => document.execCommand('bold'), title: 'Bold' },
+          { label: 'I', cmd: () => document.execCommand('italic'), title: 'Italic' },
+          { label: 'U', cmd: () => document.execCommand('underline'), title: 'Underline' },
+          { label: 'S', cmd: () => document.execCommand('strikeThrough'), title: 'Strikethrough' },
+          { label: '|', cmd: null },
+          { label: '≡', cmd: () => document.execCommand('justifyLeft'), title: 'Align Left' },
+          { label: '≡', cmd: () => document.execCommand('justifyCenter'), title: 'Align Center' },
+          { label: '≡', cmd: () => document.execCommand('justifyRight'), title: 'Align Right' },
+        ].map((t, i) => t.label === '|'
+          ? <span key={i} className="text-gray-200 select-none">|</span>
+          : (
+            <button key={i} title={t.title} onClick={t.cmd}
+              className="px-1.5 py-1 rounded hover:bg-gray-100 active:bg-gray-200 transition-colors font-medium cursor-pointer">
+              {t.label}
+            </button>
+          )
+        )}
         <div className="ml-auto text-gray-300 text-xs">
-          {ws.readability_metrics?.word_count || ''} {ws.readability_metrics?.word_count ? 'words' : ''}
           {ws.rag_context_used && (
-            <span className="ml-3 px-2 py-0.5 rounded-full text-purple-600 bg-purple-50 font-medium">🧠 RAG</span>
+            <span className="px-2 py-0.5 rounded-full text-purple-600 bg-purple-50 font-medium">🧠 RAG</span>
           )}
         </div>
       </div>
@@ -144,7 +159,9 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
             {/* Document page */}
             <div
               ref={contentRef}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
+              contentEditable
+              suppressContentEditableWarning
+              className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px] focus:outline-none"
             >
               {/* Title */}
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
