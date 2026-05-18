@@ -368,7 +368,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         {i + 1}. <span style={{ color: '#E85D04' }}>{p.word}</span>
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">💡 {p.hint}</div>
-                      <div className="text-xs text-gray-300 italic mt-0.5">{p.example}</div>
+                      <div className="text-xs text-gray-500 italic mt-0.5">{p.example}</div>
                       <div className="mt-2 border-b border-dashed border-gray-200 pb-4"></div>
                     </li>
                   ))}
