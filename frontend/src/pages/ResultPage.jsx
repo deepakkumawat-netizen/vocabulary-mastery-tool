@@ -72,6 +72,12 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
     }
   }
 
+  const GRADE_WORD_LIMITS = {
+    1: 5, 2: 8, 3: 12, 4: 15, 5: 20,
+    6: 25, 7: 35, 8: 45, 9: 55, 10: 70, 11: 85, 12: 100,
+  }
+  const wordLimit = GRADE_WORD_LIMITS[formData.grade_level] || 35
+
   const ws = worksheet || {}
   const vocabWords = ws.vocab_words || []
   const matching = ws.matching_section || {}
@@ -372,7 +378,12 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">💡 {p.hint}</div>
                       <div className="text-xs text-gray-500 italic mt-0.5">{p.example}</div>
-                      <div className="mt-2 border-b border-dashed border-gray-200 pb-4"></div>
+                      <div className="mt-2">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
+                          Word limit: up to {wordLimit} words
+                        </span>
+                        <div className="border-b border-dashed border-gray-200 mt-2 pb-6" />
+                      </div>
                     </li>
                   ))}
                 </ol>
