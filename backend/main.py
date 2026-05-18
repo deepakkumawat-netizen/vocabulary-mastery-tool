@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from database import (init_db, create_session, save_worksheet,
                       get_session_history, get_all_worksheets, save_rag_document)
 from rag import rag_retriever
-from nlp_adapter import get_grade_prompt_context, analyze_text_grade
+from nlp_adapter import get_grade_prompt_context, analyze_text_grade, GRADE_PROFILES
 from mcp_tools import MCP_TOOLS, execute_mcp_tool
 
 load_dotenv()
@@ -153,41 +153,54 @@ async def generate_worksheet(req: WorksheetRequest):
     ctx_block = f"{additional_block}\n{rag_block}".strip()
 
     def _build_prompt(extra_instructions: str = "") -> str:
-        return f"""You are an expert educator creating a Vocabulary Mastery Worksheet.
+        p = GRADE_PROFILES.get(req.grade_level, GRADE_PROFILES[7])
+        return f"""You are an expert educator and curriculum specialist.
+Your task is to create a grade-calibrated Vocabulary Mastery Worksheet.
 
 {grade_ctx}
+
+CONTENT DETAILS:
 Topic: {req.topic}
 Learning Objective: {req.learning_objective}
 {ctx_block}
+
+CRITICAL RULES:
+1. ALL 10 vocabulary words must be exactly right for Grade {req.grade_level} students (age {req.grade_level + 5}-{req.grade_level + 6}).
+2. Every definition must use SIMPLER words than the target word — a Grade {req.grade_level} student must understand it.
+3. Fill-in-blank sentences must be at Grade {req.grade_level} reading level: {p['sentence']}
+4. Sentence writing hints must be Grade {req.grade_level} appropriate: {p['hint_style']}
+5. Do NOT use words from other grade levels. Do NOT use placeholder words like 'word1'.
 {extra_instructions}
-Generate a complete vocabulary mastery worksheet. Return ONLY valid JSON with this exact structure:
+
+Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
+
 {{
   "vocab_words": [
-    {{"word": "photosynthesis", "definition": "The process plants use to make food from sunlight", "part_of_speech": "noun"}},
-    ... 10 words total
+    {{"word": "actual Grade {req.grade_level} word from topic", "definition": "Grade {req.grade_level}-appropriate definition", "part_of_speech": "noun|verb|adjective|adverb"}},
+    ... 10 words total, all relevant to '{req.topic}', all appropriate for Grade {req.grade_level}
   ],
   "matching_section": {{
     "title": "Section 1: Match the Word to Its Meaning",
-    "instructions": "Draw a line to match each word with its correct definition.",
+    "instructions": "Grade {req.grade_level}-appropriate matching instruction (1 sentence).",
     "items": [
-      {{"word": "word1", "definition": "definition1"}},
-      ... 10 pairs (shuffle definitions so they are NOT in same order as vocab_words)
+      {{"word": "word from vocab_words", "definition": "Grade {req.grade_level}-appropriate definition"}},
+      ... all 10 words, definitions in SHUFFLED order (not matching vocab_words order)
     ]
   }},
   "fill_in_blank": {{
     "title": "Section 2: Fill in the Blank",
-    "instructions": "Choose the correct vocabulary word to complete each sentence.",
-    "word_bank": ["word1", "word2", "word3", "word4", "word5", "word6", "word7", "word8"],
+    "instructions": "Grade {req.grade_level}-appropriate instruction (1 sentence).",
+    "word_bank": ["8 of the 10 vocab words"],
     "sentences": [
-      {{"sentence": "The scientist used a ___ to study the tiny organisms.", "answer": "microscope"}},
-      ... 8 sentences total
+      {{"sentence": "Grade {req.grade_level} sentence with ___ blank for the answer word.", "answer": "the correct vocab word"}},
+      ... 8 sentences total, each using a different vocab word
     ]
   }},
   "sentence_writing": {{
     "title": "Section 3: Write Your Own Sentences",
-    "instructions": "Write your own original sentence for each word. Show that you understand what it means!",
+    "instructions": "Grade {req.grade_level}-appropriate writing instruction.",
     "prompts": [
-      {{"word": "word1", "hint": "Write about a place or time when this word applies.", "example": "The ecosystem in the rainforest..."}},
+      {{"word": "vocab word", "hint": "{p['hint_style']}", "example": "Grade {req.grade_level}-appropriate example sentence"}},
       ... 5 prompts total
     ]
   }}

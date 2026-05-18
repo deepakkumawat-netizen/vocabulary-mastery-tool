@@ -1,16 +1,126 @@
 import re
 
 GRADE_PROFILES = {
-    3:  {"vocab": "simple everyday words (3-4 letters common)", "sentence": "short 5-8 words", "fk_target": 3},
-    4:  {"vocab": "basic academic words, familiar context",      "sentence": "short 6-10 words", "fk_target": 4},
-    5:  {"vocab": "grade-appropriate academic words",            "sentence": "medium 8-12 words", "fk_target": 5},
-    6:  {"vocab": "academic and domain-specific words",          "sentence": "medium 10-14 words", "fk_target": 6},
-    7:  {"vocab": "intermediate academic vocabulary",            "sentence": "medium-long 12-16 words", "fk_target": 7},
-    8:  {"vocab": "advanced academic vocabulary",                "sentence": "varied 12-18 words", "fk_target": 8},
-    9:  {"vocab": "complex academic and literary words",         "sentence": "long complex 15-20 words", "fk_target": 9},
-    10: {"vocab": "sophisticated multisyllabic vocabulary",      "sentence": "complex 15-22 words", "fk_target": 10},
-    11: {"vocab": "advanced literary and technical words",       "sentence": "complex 18-25 words", "fk_target": 11},
-    12: {"vocab": "collegiate-level vocabulary",                 "sentence": "sophisticated 20+ words", "fk_target": 12},
+    3: {
+        "vocab":           "simple, concrete everyday words (1-2 syllables); words children see in daily life",
+        "sentence":        "5-8 words; short direct sentences with one idea each",
+        "fk_target":       "2.5-3.5",
+        "blooms":          "Remember (recall) and Understand (describe in own words)",
+        "dok":             "DOK 1 — recall and reproduction",
+        "definition_style":"1 simple sentence using only Grade 2-3 words; e.g. 'A habitat is where an animal lives.'",
+        "example_style":   "daily life of an 8-9 year old: home, school, playground, pets",
+        "hint_style":      "simple action prompts; 'Write about something you see every day.'",
+        "sentence_example":"short, simple, concrete: 'The dog ran fast.'",
+        "word_instruction": "Choose ONLY words a Grade 3 student (age 8-9) encounters in class. Avoid complex multisyllabic words.",
+    },
+    4: {
+        "vocab":           "basic academic words (2-3 syllables); familiar content-area words",
+        "sentence":        "6-10 words; simple with occasional compound sentences",
+        "fk_target":       "3.5-4.5",
+        "blooms":          "Remember and Understand; 1-2 Apply tasks",
+        "dok":             "DOK 1-2 — recall and skill/concept",
+        "definition_style":"1-2 simple sentences; connect to what student already knows",
+        "example_style":   "relatable to 9-10 year olds: school, local nature, basic experiments",
+        "hint_style":      "concrete action prompts; 'Write about a time you saw this.'",
+        "sentence_example":"simple and concrete: 'The scientist studied the rock sample carefully.'",
+        "word_instruction": "Choose Tier 2 academic words appropriate for Grade 4. Definitions must use simpler words than the target word.",
+    },
+    5: {
+        "vocab":           "grade-appropriate academic words (2-4 syllables); Tier 2 vocabulary; content-area terms",
+        "sentence":        "8-12 words; mix of simple and compound sentences",
+        "fk_target":       "4.5-5.5",
+        "blooms":          "Understand and Apply; 1-2 Analyze tasks",
+        "dok":             "DOK 2 — skill and concept",
+        "definition_style":"clear definition with 1 example; show root word if helpful",
+        "example_style":   "relevant to 10-11 year olds: science class, historical events, books",
+        "hint_style":      "specific context prompts; 'Write about how this word relates to what you learned in science.'",
+        "sentence_example":"informational: 'The ecosystem depends on producers and consumers to stay balanced.'",
+        "word_instruction": "Use Tier 2 academic words appearing across subjects. Include 2-3 Tier 3 content-specific words.",
+    },
+    6: {
+        "vocab":           "academic and domain-specific words; multi-syllabic Tier 2-3 vocabulary",
+        "sentence":        "10-14 words; compound and complex sentences",
+        "fk_target":       "5.5-6.5",
+        "blooms":          "Apply and Analyze; 1-2 Evaluate tasks",
+        "dok":             "DOK 2-3 — strategic thinking",
+        "definition_style":"precise academic definition; show word family; hint at etymology",
+        "example_style":   "middle school: social issues, scientific phenomena, current events",
+        "hint_style":      "analytical prompts; 'Explain how this concept affects something in real life.'",
+        "sentence_example":"analytical: 'The government's policy had significant consequences for the local community.'",
+        "word_instruction": "Use Tier 2-3 academic vocabulary. Definitions should be precise and include context clues.",
+    },
+    7: {
+        "vocab":           "intermediate academic vocabulary; discipline-specific Tier 2-3 words; abstract concepts",
+        "sentence":        "12-16 words; varied complex sentences with subordinate clauses",
+        "fk_target":       "6.5-7.5",
+        "blooms":          "Analyze and Evaluate",
+        "dok":             "DOK 3 — strategic and extended thinking",
+        "definition_style":"nuanced definitions; connotation vs denotation; multiple contexts",
+        "example_style":   "relevant to 12-13 year olds: media, technology, STEM, social justice",
+        "hint_style":      "analytical/evaluative prompts; 'Analyze how this concept influences a real-world situation.'",
+        "sentence_example":"complex: 'Although scientists have debated the theory for decades, recent evidence suggests a more nuanced explanation.'",
+        "word_instruction": "Use academic vocabulary from standardized tests and textbooks. Include connotation notes where relevant.",
+    },
+    8: {
+        "vocab":           "advanced academic vocabulary; abstract concepts; discipline-specific academic language",
+        "sentence":        "12-18 words; varied complex structures; subordinate and relative clauses",
+        "fk_target":       "7.5-8.5",
+        "blooms":          "Analyze, Evaluate, and introductory Create",
+        "dok":             "DOK 3-4 — extended thinking",
+        "definition_style":"sophisticated definitions; semantic fields; register and connotation",
+        "example_style":   "high school preparation: civic participation, scientific research, literary analysis",
+        "hint_style":      "evaluative/creative prompts; 'Construct an argument using this concept as evidence.'",
+        "sentence_example":"sophisticated: 'The paradoxical nature of the phenomenon challenged the prevailing scientific consensus.'",
+        "word_instruction": "Use pre-AP level vocabulary. Words should challenge while remaining accessible with context. Definitions should model academic language.",
+    },
+    9: {
+        "vocab":           "complex academic and literary words; technical terminology; abstract vocabulary",
+        "sentence":        "15-20 words; complex compound-complex sentences; participial phrases",
+        "fk_target":       "8.5-9.5",
+        "blooms":          "Evaluate and Create",
+        "dok":             "DOK 3-4",
+        "definition_style":"precise scholarly definitions; etymology; field of use; formal register",
+        "example_style":   "pre-college: academic writing, research contexts, professional fields",
+        "hint_style":      "synthesis prompts; 'Synthesize this concept with a related idea from another discipline.'",
+        "sentence_example":"scholarly: 'The epistemological framework underpinning the research methodology necessitates a rigorous examination of the underlying assumptions.'",
+        "word_instruction": "Use SAT/AP level vocabulary. Include word origin when it clarifies meaning. Definitions should be scholarly and precise.",
+    },
+    10: {
+        "vocab":           "sophisticated multisyllabic vocabulary; discipline-specific academic language; college-prep",
+        "sentence":        "15-22 words; sophisticated syntax; embedded clauses; parallel structure",
+        "fk_target":       "9.5-10.5",
+        "blooms":          "Evaluate and Create at high levels",
+        "dok":             "DOK 4 — extended thinking",
+        "definition_style":"collegiate definitions; scholarly nuance; disciplinary usage",
+        "example_style":   "college-readiness: academic research, professional contexts, global issues",
+        "hint_style":      "scholarly prompts; 'Evaluate the validity of using this concept in academic argumentation.'",
+        "sentence_example":"collegiate: 'The dialectical tension between theoretical paradigms reflects the broader epistemological debates within the discipline.'",
+        "word_instruction": "Use AP/collegiate vocabulary. Definitions should match dictionary precision. Students should produce this vocabulary in formal academic writing.",
+    },
+    11: {
+        "vocab":           "advanced literary and technical words; SAT/ACT/AP level vocabulary",
+        "sentence":        "18-25 words; complex rhetorical structures; varied syntax for effect",
+        "fk_target":       "10.5-11.5",
+        "blooms":          "Create and Evaluate at advanced levels",
+        "dok":             "DOK 4",
+        "definition_style":"sophisticated academic definitions; etymology; register; word families",
+        "example_style":   "college preparation: academic writing, research, professional fields, global policy",
+        "hint_style":      "advanced synthesis; 'Construct an original argument that challenges or extends the conventional understanding of this concept.'",
+        "sentence_example":"advanced: 'The inextricable relationship between ideological presuppositions and empirical methodology fundamentally shapes the conclusions researchers draw.'",
+        "word_instruction": "Use college-level academic vocabulary. Include etymology and word family context. Prepare students for college reading.",
+    },
+    12: {
+        "vocab":           "collegiate-level vocabulary; technical and field-specific academic language",
+        "sentence":        "20+ words; sophisticated complex structures; rhetorical variety",
+        "fk_target":       "11.5-12.5",
+        "blooms":          "All Bloom's levels with emphasis on Create and Evaluate at college level",
+        "dok":             "DOK 4",
+        "definition_style":"collegiate definitions: scholarly precision, nuance, disciplinary field usage",
+        "example_style":   "college contexts: academic research, professional fields, interdisciplinary inquiry",
+        "hint_style":      "collegiate; 'Formulate a nuanced scholarly argument that positions this concept within a broader theoretical framework.'",
+        "sentence_example":"collegiate: 'The paradigmatic shift in our understanding of quantum mechanics has fundamentally reconceptualized the ontological assumptions underlying classical physics.'",
+        "word_instruction": "Use AP/collegiate vocabulary matching Merriam-Webster academic precision. Students should produce this vocabulary in formal writing.",
+    },
 }
 
 
@@ -18,7 +128,6 @@ def _count_syllables(word: str) -> int:
     word = word.lower().strip(".,!?;:'\"")
     if not word:
         return 1
-    vowels = "aeiouy"
     count = len(re.findall(r'[aeiouy]+', word))
     if word.endswith('e') and count > 1:
         count -= 1
@@ -26,22 +135,40 @@ def _count_syllables(word: str) -> int:
 
 
 def get_grade_prompt_context(grade_level: int) -> str:
-    profile = GRADE_PROFILES.get(grade_level, GRADE_PROFILES[6])
-    return (
-        f"GRADE LEVEL REQUIREMENTS (Grade {grade_level}):\n"
-        f"- Vocabulary complexity: {profile['vocab']}\n"
-        f"- Target sentence length: {profile['sentence']}\n"
-        f"- All definitions must be understandable to a Grade {grade_level} student\n"
-        f"- Examples should relate to a Grade {grade_level} student's world\n"
-    )
+    p = GRADE_PROFILES.get(grade_level, GRADE_PROFILES[7])
+    return f"""=== GRADE {grade_level} NLP CALIBRATION REQUIREMENTS ===
+You MUST follow every rule below. Content that violates any rule is unacceptable.
+
+VOCABULARY SELECTION:
+  {p['word_instruction']}
+  Complexity profile: {p['vocab']}
+
+LANGUAGE & SYNTAX:
+  Target sentence length: {p['sentence']}
+  Target Flesch-Kincaid Grade Level: {p['fk_target']}
+  Fill-in-blank sentences must use this syntax: {p['sentence_example']}
+
+COGNITIVE LEVEL (Bloom's Taxonomy):
+  Required levels: {p['blooms']}
+  Depth of Knowledge: {p['dok']}
+
+DEFINITIONS:
+  Format: {p['definition_style']}
+
+SENTENCE WRITING HINTS:
+  Format: {p['hint_style']}
+
+EXAMPLES IN CONTEXT:
+  {p['example_style']}
+=== END GRADE {grade_level} REQUIREMENTS ==="""
 
 
 def analyze_text_grade(text: str) -> dict:
     if not text:
         return {}
-    sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
-    words = re.findall(r'\b\w+\b', text)
-    if len(sentences) == 0 or len(words) < 5:
+    sentences = [s.strip() for s in re.split(r'[.!?]+', text) if len(s.strip().split()) >= 3]
+    words = re.findall(r'\b[a-zA-Z]+\b', text)
+    if not sentences or len(words) < 10:
         return {}
 
     total_syllables = sum(_count_syllables(w) for w in words)
@@ -56,4 +183,13 @@ def analyze_text_grade(text: str) -> dict:
         "flesch_kincaid_grade": fk_grade,
         "avg_sentence_length": round(avg_sentence_len, 1),
         "word_count": len(words),
+        "sentence_count": len(sentences),
     }
+
+
+def difficulty_label(grade: int) -> str:
+    if grade <= 4:    return "Beginner"
+    elif grade <= 6:  return "Elementary"
+    elif grade <= 8:  return "Intermediate"
+    elif grade <= 10: return "Advanced"
+    else:             return "Expert"
