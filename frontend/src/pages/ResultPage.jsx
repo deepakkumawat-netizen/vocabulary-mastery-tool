@@ -251,7 +251,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                 ))
               }
             </div>
-            {history.length > 7 && (
+            {history.length > 0 && (
               <div className="px-4 py-2 border-t border-gray-100 flex-shrink-0">
                 <button
                   onClick={() => setShowAllHistory(a => !a)}
