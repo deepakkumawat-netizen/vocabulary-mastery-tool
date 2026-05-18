@@ -278,12 +278,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
             <div
               key={showAnswers}
               ref={contentRef}
-              contentEditable
-              suppressContentEditableWarning
-              onKeyDown={(e) => {
-                if (e.key === 'Backspace' || e.key === 'Delete') e.preventDefault()
-              }}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px] focus:outline-none"
+              className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
             >
               {/* Title */}
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
@@ -316,7 +311,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         <td className="border border-gray-200 px-3 py-2">
                           {showAnswers
                             ? <span className="text-amber-700 font-medium">{item.definition}</span>
-                            : <span className="text-gray-200">_______________</span>
+                            : <div contentEditable suppressContentEditableWarning className="min-h-[24px] px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
                           }
                         </td>
                       </tr>
@@ -349,7 +344,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                     ))}
                   </div>
                 )}
-                <ol className="space-y-3">
+                <ol className="space-y-4">
                   {(fib.sentences || []).map((s, i) => (
                     <li key={i} className="text-sm text-gray-700">
                       <span className="font-medium text-gray-400 mr-2">{i + 1}.</span>
@@ -358,6 +353,14 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         <span className="ml-2 px-2 py-0.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700 font-medium">
                           {s.answer}
                         </span>
+                      )}
+                      {!showAnswers && (
+                        <div className="mt-1">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
+                            Write the missing word
+                          </span>
+                          <div contentEditable suppressContentEditableWarning className="min-h-[28px] mt-1 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
+                        </div>
                       )}
                     </li>
                   ))}
@@ -382,7 +385,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
                           Word limit: up to {wordLimit} words
                         </span>
-                        <div className="border-b border-dashed border-gray-200 mt-2 pb-6" />
+                        <div contentEditable suppressContentEditableWarning className="min-h-[32px] mt-2 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
                       </div>
                     </li>
                   ))}
