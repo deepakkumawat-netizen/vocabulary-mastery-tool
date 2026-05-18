@@ -142,7 +142,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
                   >
                     Clear All
                   </button>
-                ) : (
+                ) : !activeTab ? (
                   <button
                     onClick={handleExemplar}
                     className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
@@ -150,7 +150,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
                   >
                     Use Exemplar
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={handleEnhance}
                   disabled={!hasContent}
