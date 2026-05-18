@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 const GRADE_LEVELS = [
-  '3rd Grade Students', '4th Grade Students', '5th Grade Students',
+  '1st Grade Students', '2nd Grade Students', '3rd Grade Students', '4th Grade Students', '5th Grade Students',
   '6th Grade Students', '7th Grade Students', '8th Grade Students',
   '9th Grade Students', '10th Grade Students', '11th Grade Students', '12th Grade Students'
 ]

@@ -1,6 +1,30 @@
 import re
 
 GRADE_PROFILES = {
+    1: {
+        "vocab":           "high-frequency sight words (Dolch/Fry list) and simple CVC phonics words (1 syllable)",
+        "sentence":        "3-5 words; very short, simple subject-verb sentences",
+        "fk_target":       "1.0-1.5",
+        "blooms":          "Remember (recall) only — name, say, point to",
+        "dok":             "DOK 1 — recall and reproduction",
+        "definition_style":"1 very short sentence using only Kindergarten-Grade 1 words; e.g. 'A cat is a pet.'",
+        "example_style":   "immediate world of a 6-7 year old: home, family, toys, animals, colors",
+        "hint_style":      "simple visual prompts; 'Draw and write one word about this.'",
+        "sentence_example":"very short: 'The cat sat on the mat.'",
+        "word_instruction": "Use ONLY high-frequency sight words (Dolch/Fry list) and simple CVC phonics words. Every word must be decodable or on a Grade 1 sight-word list.",
+    },
+    2: {
+        "vocab":           "Grade 2 phonics patterns (CVCe, digraphs, blends) and common irregular sight words (1-2 syllables)",
+        "sentence":        "4-7 words; simple sentences with familiar nouns and action verbs",
+        "fk_target":       "1.5-2.5",
+        "blooms":          "Remember and Understand — recall, identify, describe in simple terms",
+        "dok":             "DOK 1 — recall and reproduction",
+        "definition_style":"1 simple sentence using Grade 1-2 words with a familiar example; e.g. 'Hope means you want something good to happen.'",
+        "example_style":   "daily life of a 7-8 year old: school day, friends, simple nature, family routines",
+        "hint_style":      "concrete prompts; 'Write a sentence about something you did today using this word.'",
+        "sentence_example":"simple: 'The dog ran fast down the road.'",
+        "word_instruction": "Use CVCe long-vowel words, common digraphs, and high-frequency irregular words appropriate for Grade 2. Avoid words with 3+ syllables.",
+    },
     3: {
         "vocab":           "simple, concrete everyday words (1-2 syllables); words children see in daily life",
         "sentence":        "5-8 words; short direct sentences with one idea each",
@@ -188,7 +212,8 @@ def analyze_text_grade(text: str) -> dict:
 
 
 def difficulty_label(grade: int) -> str:
-    if grade <= 4:    return "Beginner"
+    if grade <= 2:    return "Early Reader"
+    elif grade <= 4:  return "Beginner"
     elif grade <= 6:  return "Elementary"
     elif grade <= 8:  return "Intermediate"
     elif grade <= 10: return "Advanced"
