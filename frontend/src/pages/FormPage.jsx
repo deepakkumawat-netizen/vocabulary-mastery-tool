@@ -32,7 +32,7 @@ function checkContent(text) {
 export default function FormPage({ onGenerate, onBack, loading, error, prefillData }) {
   const [objective, setObjective] = useState(prefillData?.learning_objective || '')
   const [topic, setTopic] = useState(prefillData?.topic || '')
-  const [grade, setGrade] = useState(prefillData?.grade_level || '7th Grade Students')
+  const [grade, setGrade] = useState(prefillData?.grade_level || '')
   const [activeTab, setActiveTab] = useState(null)
   const [additionalContext, setAdditionalContext] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
@@ -303,8 +303,9 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
               <select
                 value={grade}
                 onChange={e => setGrade(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none appearance-none pr-8"
+                className={`w-full border rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none appearance-none pr-8 ${grade ? 'border-gray-200 text-gray-700' : 'border-orange-300 text-gray-400'}`}
               >
+                <option value="" disabled>— Select Grade Level —</option>
                 {GRADE_LEVELS.map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
@@ -329,7 +330,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
             </button>
             <button
               onClick={handleGenerate}
-              disabled={loading || (!objective.trim() && !topic.trim())}
+              disabled={loading || (!objective.trim() && !topic.trim()) || !grade}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50"
               style={{ background: '#E85D04' }}
             >
