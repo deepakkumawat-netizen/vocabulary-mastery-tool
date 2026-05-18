@@ -151,7 +151,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
 
   const handleExemplar = () => {
     setObjective('Students will accurately read grade-level words by applying phonics knowledge and recognizing irregular spellings automatically.')
-    setTopic('Short phrases focusing on long-vowel CVCe words (e.g., make, ride, hope) and common Grade 2 irregular words (e.g., said, does, were)')
+    setTopic('Short phrases focusing on long-vowel CVCe words (e.g., make, ride, hope) and common irregular words (e.g., said, does, were)')
   }
 
   const handleEnhance = () => {
@@ -237,7 +237,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
                 <textarea
                   value={topic}
                   onChange={e => setTopic(e.target.value.slice(0, 2000))}
-                  placeholder={`Example: Short phrases focusing on long-vowel CVCe words (e.g., make, ride, hope) and common Grade 2 irregular words\n(e.g., said, does, were)`}
+                  placeholder={`Example: Short phrases focusing on long-vowel CVCe words (e.g., make, ride, hope) and common irregular words (e.g., said, does, were)`}
                   rows={4}
                   className="w-full px-3 pt-2.5 text-sm text-gray-700 placeholder-gray-300 focus:outline-none resize-none"
                 />
