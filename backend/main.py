@@ -126,12 +126,15 @@ def _validate_vocab(data: dict) -> "str | None":
     if not isinstance(fib, dict):
         return "fill_in_blank section is missing"
     sentences = fib.get("sentences")
-    if not isinstance(sentences, list) or len(sentences) < 5:
-        return f"fill_in_blank.sentences must have at least 5 items, got {len(sentences) if isinstance(sentences, list) else 'missing'}"
+    if not isinstance(sentences, list) or len(sentences) < 8:
+        return f"fill_in_blank.sentences must have at least 8 items, got {len(sentences) if isinstance(sentences, list) else 'missing'}"
 
     sw = data.get("sentence_writing")
     if not isinstance(sw, dict) or not sw.get("prompts"):
         return "sentence_writing section is missing or has no prompts"
+    prompts = sw.get("prompts")
+    if not isinstance(prompts, list) or len(prompts) < 8:
+        return f"sentence_writing.prompts must have at least 8 items, got {len(prompts) if isinstance(prompts, list) else 'missing'}"
 
     return None
 
@@ -190,10 +193,10 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
   "fill_in_blank": {{
     "title": "Section 2: Fill in the Blank",
     "instructions": "Grade {req.grade_level}-appropriate instruction (1 sentence).",
-    "word_bank": ["8 of the 10 vocab words"],
+    "word_bank": ["all 10 vocab words listed here"],
     "sentences": [
       {{"sentence": "Grade {req.grade_level} sentence with ___ blank for the answer word.", "answer": "the correct vocab word"}},
-      ... 8 sentences total, each using a different vocab word
+      ... EXACTLY 10 sentences total, one for EACH vocabulary word
     ]
   }},
   "sentence_writing": {{
@@ -201,7 +204,7 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
     "instructions": "Grade {req.grade_level}-appropriate writing instruction.",
     "prompts": [
       {{"word": "vocab word", "hint": "{p['hint_style']}", "example": "Grade {req.grade_level}-appropriate example sentence"}},
-      ... 5 prompts total
+      ... EXACTLY 10 prompts total, one for EACH vocabulary word
     ]
   }}
 }}"""
@@ -230,7 +233,7 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
                     model=current_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
-                    max_tokens=3500,
+                    max_tokens=4500,
                     stream=True,
                 )
 
@@ -278,8 +281,8 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
                 last_reason = f"Validation failed: {validation_error}"
                 extra_instructions = (
                     f"IMPORTANT: Fix this validation error from your previous attempt: {validation_error}. "
-                    "Ensure vocab_words has >=8 items, matching_section is present, "
-                    "fill_in_blank has >=5 sentences, and sentence_writing has prompts.\n"
+                    "Ensure vocab_words has exactly 10 items, matching_section has 10 items, "
+                    "fill_in_blank has exactly 10 sentences, and sentence_writing has exactly 10 prompts.\n"
                 )
                 continue
 
