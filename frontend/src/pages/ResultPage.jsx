@@ -274,6 +274,9 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
               ref={contentRef}
               contentEditable
               suppressContentEditableWarning
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' || e.key === 'Delete') e.preventDefault()
+              }}
               className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px] focus:outline-none"
             >
               {/* Title */}
