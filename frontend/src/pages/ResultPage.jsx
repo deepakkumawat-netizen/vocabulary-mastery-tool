@@ -10,6 +10,8 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
   const [activeSidebar, setActiveSidebar] = useState(null)
   const [showAnswers, setShowAnswers] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [editableHTML, setEditableHTML] = useState(null)
+  const editableRef = useRef(null)
   const [toast, setToast] = useState(null)
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
@@ -49,8 +51,15 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
       return
     }
     if (label === 'Edit') {
-      setIsEditMode(e => !e)
-      setActiveSidebar(prev => prev === 'Edit' ? null : 'Edit')
+      if (!isEditMode) {
+        setEditableHTML(contentRef.current?.innerHTML || '')
+        setIsEditMode(true)
+        setActiveSidebar('Edit')
+        setTimeout(() => { editableRef.current?.focus() }, 80)
+      } else {
+        setIsEditMode(false)
+        setActiveSidebar(null)
+      }
       return
     }
     if (label === 'Evaluate') {
@@ -283,13 +292,19 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
 
             {/* Document page */}
             {isEditMode && <EditorToolbar onDone={() => { setIsEditMode(false); setActiveSidebar(null) }} />}
+            {isEditMode ? (
+              <div
+                ref={editableRef}
+                contentEditable
+                suppressContentEditableWarning
+                dangerouslySetInnerHTML={{ __html: editableHTML || '' }}
+                className="bg-white rounded-xl shadow-sm border-2 border-dashed border-orange-400 p-10 min-h-[800px] focus:outline-none"
+              />
+            ) : (
             <div
               key={showAnswers}
               ref={contentRef}
               className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
-              contentEditable={isEditMode}
-              suppressContentEditableWarning
-              style={{ outline: isEditMode ? '2px dashed #E85D04' : 'none' }}
             >
               {/* Title */}
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
@@ -403,6 +418,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                 </ol>
               </div>
             </div>
+            )}
 
           </div>
         </div>
