@@ -214,7 +214,7 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
         return f"data: {json.dumps(obj)}\n\n"
 
     def stream_gen():
-        max_attempts = 3
+        max_attempts = 5
         extra_instructions = ""
         last_reason = ""
         model_idx = 0
@@ -262,6 +262,8 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
             if raw.endswith("```"):
                 raw = raw[:-3]
             raw = raw.strip()
+            import re as _re
+            raw = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', raw)
 
             yield _sse({"type": "status", "message": "Parsing JSON response…"})
 
