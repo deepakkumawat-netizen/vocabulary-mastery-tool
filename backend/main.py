@@ -157,11 +157,28 @@ async def generate_worksheet(req: WorksheetRequest):
 
     def _build_prompt(extra_instructions: str = "") -> str:
         p = GRADE_PROFILES.get(req.grade_level, GRADE_PROFILES[7])
+
+        if req.grade_level <= 6:
+            max_syl = 2 if req.grade_level <= 3 else (3 if req.grade_level <= 5 else 4)
+            low_grade_block = f"""
+⚠️ GRADE {req.grade_level} MANDATORY RULES — VIOLATION = RETRY:
+- Vocabulary words MUST be simple enough for a {req.grade_level + 5}-year-old child.
+- Maximum {max_syl} syllables per vocabulary word.
+- FORBIDDEN WORDS: consequently, notwithstanding, conversely, albeit, thereby, furthermore,
+  precipitation, continental, equatorial, atmospheric, geographical, predominantly, subsequently.
+- Definitions must use even SIMPLER words than the vocab word itself.
+- Sentences must be: {p['sentence']}
+- DO NOT use college or high-school level vocabulary for Grade {req.grade_level}.
+- Adapt the TOPIC to the grade level — teach simple concepts about '{req.topic}', not advanced ones.
+"""
+        else:
+            low_grade_block = ""
+
         return f"""You are an expert educator and curriculum specialist.
 Your task is to create a grade-calibrated Vocabulary Mastery Worksheet.
 
 {grade_ctx}
-
+{low_grade_block}
 CONTENT DETAILS:
 Topic: {req.topic}
 Learning Objective: {req.learning_objective}
