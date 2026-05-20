@@ -388,13 +388,18 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         {i + 1}. <span style={{ color: '#E85D04' }}>{p.word}</span>
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">💡 {p.hint}</div>
-                      <div className="text-xs text-gray-500 italic mt-0.5">{p.example}</div>
-                      <div className="mt-2">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
-                          Word limit: up to {wordLimit} words
-                        </span>
-                        <div contentEditable suppressContentEditableWarning className="min-h-[32px] mt-2 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
-                      </div>
+                      {showAnswers ? (
+                        <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700 font-medium">
+                          {p.example}
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
+                            Word limit: up to {wordLimit} words
+                          </span>
+                          <div contentEditable suppressContentEditableWarning className="min-h-[32px] mt-2 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>
