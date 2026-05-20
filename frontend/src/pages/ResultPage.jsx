@@ -208,6 +208,11 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
         </div>
       )}
 
+      {/* Editor toolbar — outside scroll area so it stays fixed while scrolling */}
+      {isEditMode && (
+        <EditorToolbar onDone={() => { setSavedHTML(editableRef.current?.innerHTML || editableHTML); setIsEditMode(false); setActiveSidebar(null) }} />
+      )}
+
       {/* Main layout: Sidebar + Document */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar onAction={handleSidebarAction} activeAction={activeSidebar} />
@@ -263,7 +268,6 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
           <div className="max-w-3xl mx-auto">
 
             {/* Document page */}
-            {isEditMode && <EditorToolbar onDone={() => { setSavedHTML(editableRef.current?.innerHTML || editableHTML); setIsEditMode(false); setActiveSidebar(null) }} />}
             {isEditMode ? (
               <div
                 ref={editableRef}
