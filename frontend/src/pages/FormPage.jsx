@@ -141,9 +141,14 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
       showBlocked(flagged)
       return
     }
+    const gradeNum = parseInt(grade, 10)
+    if (!gradeNum || gradeNum < 1 || gradeNum > 12) {
+      showBlocked('Please select a Reading Level (grade) before generating.')
+      return
+    }
     onGenerate({
       topic: topic.trim(),
-      grade_level: parseInt(grade),
+      grade_level: gradeNum,
       learning_objective: objective.trim(),
       additional_context: additionalContext || undefined,
     })
