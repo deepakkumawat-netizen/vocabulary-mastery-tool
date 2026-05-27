@@ -158,6 +158,18 @@ def _count_syllables(word: str) -> int:
     return max(count, 1)
 
 
+def get_word_count(grade_level: int) -> int:
+    """Number of vocabulary words appropriate for the grade.
+    Younger students get fewer items so worksheets aren't overwhelming."""
+    if grade_level <= 2:
+        return 5
+    if grade_level <= 5:
+        return 7
+    if grade_level <= 8:
+        return 8
+    return 10
+
+
 def get_grade_prompt_context(grade_level: int) -> str:
     p = GRADE_PROFILES.get(grade_level, GRADE_PROFILES[7])
     return f"""=== GRADE {grade_level} NLP CALIBRATION REQUIREMENTS ===

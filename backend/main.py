@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from database import (init_db, create_session, save_worksheet,
                       get_session_history, get_all_worksheets, save_rag_document)
 from rag import rag_retriever
-from nlp_adapter import get_grade_prompt_context, analyze_text_grade, GRADE_PROFILES
+from nlp_adapter import get_grade_prompt_context, analyze_text_grade, GRADE_PROFILES, get_word_count
 from mcp_tools import MCP_TOOLS, execute_mcp_tool
 
 load_dotenv()
@@ -112,11 +112,12 @@ async def list_worksheets(limit: int = 20):
 
 # ── Generate ──────────────────────────────────────────────────────────────────
 
-def _validate_vocab(data: dict) -> "str | None":
-    """Return an error description string if the worksheet JSON is invalid, else None."""
+def _validate_vocab(data: dict, min_items: int = 8) -> "str | None":
+    """Return an error description string if the worksheet JSON is invalid, else None.
+    `min_items` is the grade-calibrated minimum number of words/sentences/prompts."""
     vocab_words = data.get("vocab_words")
-    if not isinstance(vocab_words, list) or len(vocab_words) < 8:
-        return f"vocab_words must have at least 8 items, got {len(vocab_words) if isinstance(vocab_words, list) else 'missing'}"
+    if not isinstance(vocab_words, list) or len(vocab_words) < min_items:
+        return f"vocab_words must have at least {min_items} items, got {len(vocab_words) if isinstance(vocab_words, list) else 'missing'}"
 
     matching = data.get("matching_section")
     if not isinstance(matching, dict) or not matching.get("items"):
@@ -126,15 +127,15 @@ def _validate_vocab(data: dict) -> "str | None":
     if not isinstance(fib, dict):
         return "fill_in_blank section is missing"
     sentences = fib.get("sentences")
-    if not isinstance(sentences, list) or len(sentences) < 8:
-        return f"fill_in_blank.sentences must have at least 8 items, got {len(sentences) if isinstance(sentences, list) else 'missing'}"
+    if not isinstance(sentences, list) or len(sentences) < min_items:
+        return f"fill_in_blank.sentences must have at least {min_items} items, got {len(sentences) if isinstance(sentences, list) else 'missing'}"
 
     sw = data.get("sentence_writing")
     if not isinstance(sw, dict) or not sw.get("prompts"):
         return "sentence_writing section is missing or has no prompts"
     prompts = sw.get("prompts")
-    if not isinstance(prompts, list) or len(prompts) < 8:
-        return f"sentence_writing.prompts must have at least 8 items, got {len(prompts) if isinstance(prompts, list) else 'missing'}"
+    if not isinstance(prompts, list) or len(prompts) < min_items:
+        return f"sentence_writing.prompts must have at least {min_items} items, got {len(prompts) if isinstance(prompts, list) else 'missing'}"
 
     return None
 
@@ -157,6 +158,7 @@ async def generate_worksheet(req: WorksheetRequest):
 
     def _build_prompt(extra_instructions: str = "") -> str:
         p = GRADE_PROFILES.get(req.grade_level, GRADE_PROFILES[7])
+        n = get_word_count(req.grade_level)
 
         return f"""You are an expert educator and curriculum specialist.
 Your task is to create a grade-calibrated Vocabulary Mastery Worksheet.
@@ -169,11 +171,12 @@ Learning Objective: {req.learning_objective}
 {ctx_block}
 
 CRITICAL RULES:
-1. ALL 10 vocabulary words must be exactly right for Grade {req.grade_level} students (age {req.grade_level + 5}-{req.grade_level + 6}).
-2. Every definition must use SIMPLER words than the target word — a Grade {req.grade_level} student must understand it.
-3. Fill-in-blank sentences must be at Grade {req.grade_level} reading level: {p['sentence']}
-4. Sentence writing hints must be Grade {req.grade_level} appropriate: {p['hint_style']}
-5. Do NOT use words from other grade levels. Do NOT use placeholder words like 'word1'.
+1. Generate EXACTLY {n} vocabulary words — this count is calibrated for Grade {req.grade_level} attention span. Do NOT generate more or fewer.
+2. ALL {n} vocabulary words must be exactly right for Grade {req.grade_level} students (age {req.grade_level + 5}-{req.grade_level + 6}).
+3. Every definition must use SIMPLER words than the target word — a Grade {req.grade_level} student must understand it.
+4. Fill-in-blank sentences must be at Grade {req.grade_level} reading level: {p['sentence']}
+5. Sentence writing hints must be Grade {req.grade_level} appropriate: {p['hint_style']}
+6. Do NOT use words from other grade levels. Do NOT use placeholder words like 'word1'.
 {extra_instructions}
 
 Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
@@ -181,23 +184,23 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
 {{
   "vocab_words": [
     {{"word": "actual Grade {req.grade_level} word from topic", "definition": "Grade {req.grade_level}-appropriate definition", "part_of_speech": "noun|verb|adjective|adverb"}},
-    ... 10 words total, all relevant to '{req.topic}', all appropriate for Grade {req.grade_level}
+    ... EXACTLY {n} words total, all relevant to '{req.topic}', all appropriate for Grade {req.grade_level}
   ],
   "matching_section": {{
     "title": "Section 1: Match the Word to Its Meaning",
     "instructions": "Grade {req.grade_level}-appropriate matching instruction (1 sentence).",
     "items": [
       {{"word": "word from vocab_words", "definition": "Grade {req.grade_level}-appropriate definition"}},
-      ... all 10 words, definitions in SHUFFLED order (not matching vocab_words order)
+      ... all {n} words, definitions in SHUFFLED order (not matching vocab_words order)
     ]
   }},
   "fill_in_blank": {{
     "title": "Section 2: Fill in the Blank",
     "instructions": "Grade {req.grade_level}-appropriate instruction (1 sentence).",
-    "word_bank": ["all 10 vocab words listed here"],
+    "word_bank": ["all {n} vocab words listed here"],
     "sentences": [
       {{"sentence": "Grade {req.grade_level} sentence with ___ blank for the answer word.", "answer": "the correct vocab word"}},
-      ... EXACTLY 10 sentences total, one for EACH vocabulary word
+      ... EXACTLY {n} sentences total, one for EACH vocabulary word
     ]
   }},
   "sentence_writing": {{
@@ -205,7 +208,7 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
     "instructions": "Grade {req.grade_level}-appropriate writing instruction.",
     "prompts": [
       {{"word": "vocab word", "hint": "{p['hint_style']}", "example": "Grade {req.grade_level}-appropriate example sentence"}},
-      ... EXACTLY 10 prompts total, one for EACH vocabulary word
+      ... EXACTLY {n} prompts total, one for EACH vocabulary word
     ]
   }}
 }}"""
@@ -279,13 +282,14 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
 
             yield _sse({"type": "status", "message": "Validating worksheet structure…"})
 
-            validation_error = _validate_vocab(data)
+            validation_error = _validate_vocab(data, min_items=get_word_count(req.grade_level))
             if validation_error:
                 last_reason = f"Validation failed: {validation_error}"
+                _n = get_word_count(req.grade_level)
                 extra_instructions = (
                     f"IMPORTANT: Fix this validation error from your previous attempt: {validation_error}. "
-                    "Ensure vocab_words has exactly 10 items, matching_section has 10 items, "
-                    "fill_in_blank has exactly 10 sentences, and sentence_writing has exactly 10 prompts.\n"
+                    f"Ensure vocab_words has exactly {_n} items, matching_section has {_n} items, "
+                    f"fill_in_blank has exactly {_n} sentences, and sentence_writing has exactly {_n} prompts.\n"
                 )
                 continue
 
