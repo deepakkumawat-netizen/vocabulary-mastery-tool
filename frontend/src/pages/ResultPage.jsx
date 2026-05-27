@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import Sidebar from '../components/Sidebar'
@@ -18,6 +18,16 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
   const [showHistory, setShowHistory] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
   const contentRef = useRef(null)
+
+  // When a different worksheet is loaded (from history or a new generation),
+  // clear any frozen edited HTML and reset to student view so the Answer Key
+  // toggle works on the freshly-loaded worksheet.
+  useEffect(() => {
+    setSavedHTML(null)
+    setShowAnswers(false)
+    setIsEditMode(false)
+    setEditableHTML(null)
+  }, [worksheet])
 
   const formatDate = (iso) => {
     try {
