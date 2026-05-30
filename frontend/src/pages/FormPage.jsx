@@ -139,6 +139,7 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
       setFileStatus(text
         ? `✓ ${file.name} — ${data.chars_indexed} chars loaded as source material`
         : `✓ ${file.name} added`)
+      autoFillFromSource(text)
     } catch (err) {
       setFileStatus(`Upload failed: ${err.message}`)
     }
@@ -154,9 +155,11 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.detail || 'fetch failed')
-      setSourceText(data.text || '')
+      const t = data.text || ''
+      setSourceText(t)
       setSourceLabel(`Website: ${data.title || url} (${data.chars} chars)`)
       setFileStatus(`✓ Loaded ${data.chars} chars from ${data.title || url}`)
+      autoFillFromSource(t)
     } catch (err) {
       setFileStatus(`Could not fetch URL: ${err.message}`)
     }
@@ -176,9 +179,11 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
         if (res.status === 502) setYoutubeBlocked(true)
         throw new Error(data.detail || 'fetch failed')
       }
-      setSourceText(data.text || '')
+      const t = data.text || ''
+      setSourceText(t)
       setSourceLabel(`YouTube transcript (${data.chars} chars)`)
       setFileStatus(`✓ Loaded YouTube transcript — ${data.chars} chars`)
+      autoFillFromSource(t)
     } catch (err) {
       setFileStatus(`Could not fetch YouTube transcript: ${err.message}`)
     }
@@ -191,6 +196,26 @@ export default function FormPage({ onGenerate, onBack, loading, error, prefillDa
     setSourceLabel(`YouTube transcript (pasted, ${t.length} chars)`)
     setFileStatus(`✓ Loaded pasted transcript — ${t.length} chars`)
     setYoutubeBlocked(false)
+    autoFillFromSource(t)
+  }
+
+  // Ask the AI to suggest Topic + Learning Objective from the loaded
+  // source material. Only fills empty fields — never overwrites the
+  // teacher's own input.
+  const autoFillFromSource = async (text) => {
+    if (!text || text.trim().length < 50) return
+    if (objective.trim() && topic.trim()) return
+    try {
+      const gradeNum = parseInt(grade, 10) || undefined
+      const res = await fetch('/api/auto-fields', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_text: text, grade_level: gradeNum }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return
+      if (!topic.trim() && data.topic) setTopic(data.topic)
+      if (!objective.trim() && data.learning_objective) setObjective(data.learning_objective)
+    } catch (_) { /* silent */ }
   }
 
   const handleGenerate = () => {
