@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas'
 import Sidebar from '../components/Sidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import EditorToolbar from '../components/EditorToolbar'
+import HistoryPopup from '../components/HistoryPopup'
 
 export default function ResultPage({ worksheet, formData, tabs, onNewTab, onCloseTab, onAdapt, onRemix, onLoadFromHistory, api }) {
   const [activeTabIdx, setActiveTabIdx] = useState(0)
@@ -93,16 +94,9 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
       return
     }
     if (label === 'History') {
-      const next = !showHistory
-      setShowHistory(next)
-      setActiveSidebar(next ? 'History' : null)
-      setShowAllHistory(false)
-      if (next) {
-        fetch(`${api}/api/worksheets?limit=50`)
-          .then(r => r.json())
-          .then(d => setHistory(d.worksheets || []))
-          .catch(() => setHistory([]))
-      }
+      // History now opens in a centered popup with a per-item Word-like editor + downloads.
+      setShowHistory(true)
+      setActiveSidebar('History')
       return
     }
   }
@@ -231,55 +225,17 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
         <EditorToolbar onDone={() => { setSavedHTML(editableRef.current?.innerHTML || editableHTML); setIsEditMode(false); setActiveSidebar(null) }} />
       )}
 
+      {/* Centered History popup with per-item Word-like editor + downloads */}
+      <HistoryPopup
+        open={showHistory}
+        onClose={() => { setShowHistory(false); setActiveSidebar(null) }}
+        api={api}
+        onLoadFromHistory={(item) => onLoadFromHistory?.(item)}
+      />
+
       {/* Main layout: Sidebar + Document */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar onAction={handleSidebarAction} activeAction={activeSidebar} />
-
-        {/* History panel */}
-        {showHistory && (
-          <div className="w-72 border-r border-gray-200 bg-white flex flex-col flex-shrink-0" style={{ maxHeight: '100%' }}>
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-              <span className="text-sm font-semibold text-gray-800">
-                {showAllHistory ? 'All History' : 'Recent (Last 7)'}
-              </span>
-              <button onClick={() => { setShowHistory(false); setActiveSidebar(null) }}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {history.length === 0
-                ? <p className="px-4 py-6 text-xs text-gray-400 text-center">No worksheets generated yet.</p>
-                : (showAllHistory ? history : history.slice(0, 7)).map((item, i) => (
-                  <button
-                    key={item.id || i}
-                    onClick={() => {
-                      onLoadFromHistory?.(item)
-                      setShowHistory(false)
-                      setActiveSidebar(null)
-                    }}
-                    className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-orange-50 transition-colors group"
-                  >
-                    <p className="text-xs font-semibold text-gray-800 truncate group-hover:text-orange-700">
-                      {item.topic || 'Untitled'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Grade {item.grade_level} · {formatDate(item.created_at)}
-                    </p>
-                  </button>
-                ))
-              }
-            </div>
-            {history.length > 0 && (
-              <div className="px-4 py-2 border-t border-gray-100 flex-shrink-0">
-                <button
-                  onClick={() => setShowAllHistory(a => !a)}
-                  className="text-xs text-orange-600 hover:text-orange-700 font-medium w-full text-center"
-                >
-                  {showAllHistory ? '↑ Show last 7 only' : `↓ View all ${history.length} worksheets`}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Document area */}
         <div className="flex-1 overflow-y-auto px-8 py-8">
