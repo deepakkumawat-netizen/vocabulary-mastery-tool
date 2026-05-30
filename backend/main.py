@@ -562,38 +562,82 @@ async def auto_fields(req: dict):
 
 
 async def _youtube_metadata_fallback(video_id: str, url: str) -> dict | None:
-    """Scrape the public YouTube watch page for title + description when the
-    transcript API is IP-blocked. Works from any IP."""
+    """Build source_text from public YouTube metadata when the transcript API
+    is IP-blocked. Tries three sources in order so we always return
+    *something* the LLM can use:
+
+      1. YouTube oEmbed (always works, gives title + channel)
+      2. noembed.com aggregator (often includes a longer description)
+      3. youtube.com/watch with consent cookie (full shortDescription)
+    """
+    import httpx, re as _re2
+    title = ""
+    author = ""
+    description = ""
+
     try:
-        import httpx, re as _re2
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)"}) as cx:
+            r = await cx.get("https://www.youtube.com/oembed",
+                params={"url": f"https://www.youtube.com/watch?v={video_id}", "format": "json"})
+            if r.status_code == 200:
+                j = r.json()
+                title = (j.get("title") or "").strip()
+                author = (j.get("author_name") or "").strip()
+    except Exception as _e:
+        print(f"[YouTube oEmbed] failed: {_e}")
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)"}) as cx:
+            r = await cx.get("https://noembed.com/embed",
+                params={"url": f"https://www.youtube.com/watch?v={video_id}"})
+            if r.status_code == 200:
+                j = r.json()
+                if not title:  title  = (j.get("title") or "").strip()
+                if not author: author = (j.get("author_name") or "").strip()
+                description = (j.get("description") or "").strip()
+    except Exception as _e:
+        print(f"[YouTube noembed] failed: {_e}")
+
+    try:
         from bs4 import BeautifulSoup
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)",
-                     "Accept-Language": "en-US,en;q=0.9"}) as cx:
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+000",
+            }) as cx:
             r = await cx.get(f"https://www.youtube.com/watch?v={video_id}")
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            title = ""
-            description = ""
-            ot = soup.find("meta", attrs={"property": "og:title"})
-            od = soup.find("meta", attrs={"property": "og:description"})
-            if ot: title = (ot.get("content") or "").strip()
-            if od: description = (od.get("content") or "").strip()
-            longer_desc = ""
-            for s in soup.find_all("script"):
-                txt = s.string or ""
-                if "shortDescription" in txt:
-                    mm = _re2.search(r'"shortDescription":"((?:\\.|[^"\\])*)"', txt)
-                    if mm:
-                        longer_desc = mm.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
-                        break
-            text = (title + "\n\n" + (longer_desc or description)).strip()
-            if len(text) < 60:
-                return None
-            return {"title": title, "text": text}
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, "html.parser")
+                if not title:
+                    ot = soup.find("meta", attrs={"property": "og:title"})
+                    if ot: title = (ot.get("content") or "").strip()
+                ot_desc = soup.find("meta", attrs={"property": "og:description"})
+                if ot_desc and not description:
+                    description = (ot_desc.get("content") or "").strip()
+                for s in soup.find_all("script"):
+                    txt = s.string or ""
+                    if "shortDescription" in txt:
+                        mm = _re2.search(r'"shortDescription":"((?:\\.|[^"\\])*)"', txt)
+                        if mm:
+                            full = mm.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
+                            if len(full) > len(description):
+                                description = full
+                            break
     except Exception as _e:
-        print(f"[YouTube metadata fallback] failed: {_e}")
+        print(f"[YouTube watch-page] failed: {_e}")
+
+    pieces = []
+    if title:       pieces.append(f"Video title: {title}")
+    if author:      pieces.append(f"Channel: {author}")
+    if description: pieces.append(f"\n{description}")
+    text = "\n".join(pieces).strip()
+    if not text or len(text) < 20:
         return None
+    return {"title": title or f"YouTube video {video_id}", "text": text}
 
 
 @app.post("/api/extract-youtube")
