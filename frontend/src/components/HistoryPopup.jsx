@@ -11,33 +11,49 @@ const fmt = (s) => {
 }
 
 // Render vocabulary worksheet JSON to HTML for the contentEditable.
+// Field names must match the backend schema used in ResultPage.jsx:
+//   - vocab_words: [{word, part_of_speech, definition}]
+//   - matching_section: {title, instructions, items: [{word, definition}]}
+//   - fill_in_blank (SINGULAR): {title, instructions, word_bank: [str], sentences: [{sentence, answer}]}
+//   - sentence_writing: {title, instructions, prompts: [{word, hint, example}]}
 function worksheetToHtml(w) {
   if (!w) return ''
   if (typeof w === 'string') return w
   const parts = []
-  const block = (title, body) => parts.push(`<h2 style="font-size:18px;font-weight:700;margin:18px 0 8px;color:#0f172a">${title}</h2>${body}`)
+  const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const block = (title, body) => parts.push(`<h2 style="font-size:18px;font-weight:700;margin:18px 0 8px;color:#0f172a">${esc(title)}</h2>${body}`)
 
   if (Array.isArray(w.vocab_words) && w.vocab_words.length) {
-    const items = w.vocab_words.map(v => `<li><strong>${v.word || ''}</strong>${v.part_of_speech ? ` <em style="color:#6b7280">(${v.part_of_speech})</em>` : ''}${v.definition ? ` — ${v.definition}` : ''}</li>`).join('')
+    const items = w.vocab_words.map(v => `<li><strong>${esc(v.word)}</strong>${v.part_of_speech ? ` <em style="color:#6b7280">(${esc(v.part_of_speech)})</em>` : ''}${v.definition ? ` — ${esc(v.definition)}` : ''}</li>`).join('')
     block('Vocabulary Words', `<ul style="padding-left:22px;line-height:1.7">${items}</ul>`)
   }
   if (w.matching_section) {
-    const items = (w.matching_section.items || []).map(it => `<li><strong>${it.word || ''}</strong> — ${it.definition || ''}</li>`).join('')
-    block(w.matching_section.title || 'Match the Word', `
-      <p style="color:#475569;font-size:14px;margin:0 0 6px">${w.matching_section.instructions || ''}</p>
+    const items = (w.matching_section.items || []).map(it => `<li><strong>${esc(it.word)}</strong> — ${esc(it.definition)}</li>`).join('')
+    block(w.matching_section.title || 'Section 1: Match the Word to Its Meaning', `
+      <p style="color:#475569;font-size:14px;margin:0 0 6px">${esc(w.matching_section.instructions)}</p>
       <ol style="padding-left:22px;line-height:1.7">${items}</ol>`)
   }
-  if (w.fill_in_blanks) {
-    const items = (w.fill_in_blanks.items || []).map((it, i) => `<li>${it.sentence || ''}${it.answer ? `<br/><span style="color:#9ca3af;font-size:12px">Answer: ${it.answer}</span>` : ''}</li>`).join('')
-    block(w.fill_in_blanks.title || 'Fill in the Blanks', `
-      <p style="color:#475569;font-size:14px;margin:0 0 6px">${w.fill_in_blanks.instructions || ''}</p>
-      <ol style="padding-left:22px;line-height:1.8">${items}</ol>`)
+  // Fill in the Blank (note: singular `fill_in_blank`, with `sentences` and `word_bank`)
+  if (w.fill_in_blank) {
+    const wb = Array.isArray(w.fill_in_blank.word_bank) && w.fill_in_blank.word_bank.length
+      ? `<div style="margin:6px 0 10px;padding:8px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;color:#475569"><strong>Word Bank:</strong> ${w.fill_in_blank.word_bank.map(esc).join(' · ')}</div>`
+      : ''
+    const sentences = (w.fill_in_blank.sentences || []).map(s =>
+      `<li>${esc(s.sentence)}${s.answer ? `<br/><span style="color:#b45309;font-size:12px">Answer: ${esc(s.answer)}</span>` : ''}</li>`
+    ).join('')
+    block(w.fill_in_blank.title || 'Section 2: Fill in the Blank', `
+      <p style="color:#475569;font-size:14px;margin:0 0 6px">${esc(w.fill_in_blank.instructions)}</p>
+      ${wb}
+      <ol style="padding-left:22px;line-height:1.8">${sentences}</ol>`)
   }
+  // Sentence Writing — items live under `prompts` with {word, hint, example}
   if (w.sentence_writing) {
-    const items = (w.sentence_writing.items || []).map(it => `<li><strong>${it.word || ''}</strong>${it.hint ? `<br/><span style="color:#6b7280;font-size:12px;font-style:italic">${it.hint}</span>` : ''}</li>`).join('')
-    block(w.sentence_writing.title || 'Sentence Writing', `
-      <p style="color:#475569;font-size:14px;margin:0 0 6px">${w.sentence_writing.instructions || ''}</p>
-      <ol style="padding-left:22px;line-height:1.8">${items}</ol>`)
+    const prompts = (w.sentence_writing.prompts || []).map(p =>
+      `<li><strong style="color:#E85D04">${esc(p.word)}</strong>${p.hint ? `<br/><span style="color:#6b7280;font-size:12px;font-style:italic">💡 ${esc(p.hint)}</span>` : ''}${p.example ? `<br/><span style="color:#b45309;font-size:12px">Example: ${esc(p.example)}</span>` : ''}</li>`
+    ).join('')
+    block(w.sentence_writing.title || 'Section 3: Write Your Own Sentences', `
+      <p style="color:#475569;font-size:14px;margin:0 0 6px">${esc(w.sentence_writing.instructions)}</p>
+      <ol style="padding-left:22px;line-height:1.9">${prompts}</ol>`)
   }
   return parts.join('')
 }
