@@ -561,9 +561,46 @@ async def auto_fields(req: dict):
         raise HTTPException(status_code=500, detail=f"auto-fields failed: {e}")
 
 
+async def _youtube_metadata_fallback(video_id: str, url: str) -> dict | None:
+    """Scrape the public YouTube watch page for title + description when the
+    transcript API is IP-blocked. Works from any IP."""
+    try:
+        import httpx, re as _re2
+        from bs4 import BeautifulSoup
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)",
+                     "Accept-Language": "en-US,en;q=0.9"}) as cx:
+            r = await cx.get(f"https://www.youtube.com/watch?v={video_id}")
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            title = ""
+            description = ""
+            ot = soup.find("meta", attrs={"property": "og:title"})
+            od = soup.find("meta", attrs={"property": "og:description"})
+            if ot: title = (ot.get("content") or "").strip()
+            if od: description = (od.get("content") or "").strip()
+            longer_desc = ""
+            for s in soup.find_all("script"):
+                txt = s.string or ""
+                if "shortDescription" in txt:
+                    mm = _re2.search(r'"shortDescription":"((?:\\.|[^"\\])*)"', txt)
+                    if mm:
+                        longer_desc = mm.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
+                        break
+            text = (title + "\n\n" + (longer_desc or description)).strip()
+            if len(text) < 60:
+                return None
+            return {"title": title, "text": text}
+    except Exception as _e:
+        print(f"[YouTube metadata fallback] failed: {_e}")
+        return None
+
+
 @app.post("/api/extract-youtube")
 async def extract_youtube(req: dict):
-    """Fetch a YouTube transcript and return it as source_text."""
+    """Fetch a YouTube transcript and return it as source_text. If YouTube
+    blocks the transcript API (typical on cloud IPs), fall back to scraping
+    the video's title + description."""
     url = (req.get("url") or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
@@ -601,15 +638,29 @@ async def extract_youtube(req: dict):
     except Exception as e:
         msg = str(e)
         blocked = ("blocking requests" in msg.lower()
-                   or "ip" in msg.lower() and "block" in msg.lower()
+                   or ("ip" in msg.lower() and "block" in msg.lower())
                    or "could not retrieve a transcript" in msg.lower())
+
+        if blocked:
+            fallback = await _youtube_metadata_fallback(video_id, url)
+            if fallback:
+                return {
+                    "success": True,
+                    "video_id": video_id,
+                    "url": url,
+                    "text": fallback["text"][:8000],
+                    "chars": len(fallback["text"]),
+                    "title": fallback["title"],
+                    "note": "Transcript was blocked from our server's IP — using the video's title + description instead. For best results, paste the full transcript manually.",
+                }
+
         raise HTTPException(
             status_code=502 if blocked else 500,
             detail=(
-                "YouTube blocks transcript requests from our cloud server's IP. "
-                "Please open the video in your browser → click the ⋯ menu (or the "
-                "three-dot icon) below the video → 'Show transcript' → copy all the "
-                "text → paste it into the textarea below."
+                "YouTube blocks transcript requests from our cloud server's IP, and we "
+                "couldn't reach the video's public description either. Please open the "
+                "video in your browser → click the ⋯ menu (or 'Show transcript' in the "
+                "description) → copy the transcript → paste it into the textarea below."
                 if blocked else f"YouTube transcript fetch failed: {msg}"
             ),
         )
