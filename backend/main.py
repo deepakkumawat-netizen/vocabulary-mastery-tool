@@ -73,6 +73,7 @@ class WorksheetRequest(BaseModel):
     topic: str
     grade_level: int
     learning_objective: str
+    source_text: Optional[str] = None
     additional_context: Optional[str] = None
     session_id: Optional[str] = None
 
@@ -152,9 +153,14 @@ async def generate_worksheet(req: WorksheetRequest):
     grade_ctx = get_grade_prompt_context(req.grade_level)
 
     # Pre-compute optional blocks to avoid backslashes inside f-string expressions
+    source_block = (
+        "\nSOURCE MATERIAL (MANDATORY — pick vocabulary words from THIS content; "
+        "definitions, examples and context sentences must reflect what the source actually says):\n"
+        f"---\n{req.source_text[:6000]}\n---\n"
+    ) if req.source_text else ""
     additional_block = f"Additional Context: {req.additional_context}" if req.additional_context else ""
     rag_block = f"\n{rag_context}" if rag_context else ""
-    ctx_block = f"{additional_block}\n{rag_block}".strip()
+    ctx_block = f"{source_block}{additional_block}\n{rag_block}".strip()
 
     def _build_prompt(extra_instructions: str = "") -> str:
         p = GRADE_PROFILES.get(req.grade_level, GRADE_PROFILES[7])
@@ -456,9 +462,72 @@ async def add_rag_file(file: UploadFile = File(...)):
     else:
         content = raw.decode("utf-8", errors="ignore")
 
+    content = (content or "").strip()
     doc_id = save_rag_document(content[:6000], "file", file.filename, 0)
     rag_retriever.build_index()
-    return {"success": True, "doc_id": doc_id, "chars_indexed": len(content)}
+    # Return the extracted text so the frontend can pass it as source_text.
+    return {
+        "success": True,
+        "doc_id": doc_id,
+        "chars_indexed": len(content),
+        "text": content[:8000],
+        "filename": file.filename,
+    }
+
+
+@app.post("/api/extract-url")
+async def extract_url(req: dict):
+    """Fetch a webpage and return cleaned text as source_text."""
+    url = (req.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        import httpx, re as _re
+        from bs4 import BeautifulSoup
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)"}) as cx:
+            r = await cx.get(url)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            for bad in soup(["script", "style", "noscript", "iframe", "nav", "footer", "header", "form", "aside"]):
+                bad.decompose()
+            title = (soup.title.string or "").strip() if soup.title else ""
+            main = soup.find("main") or soup.find("article") or soup.body or soup
+            text = _re.sub(r"\s+\n", "\n", main.get_text("\n", strip=True))
+            text = _re.sub(r"\n{3,}", "\n\n", text).strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="Could not extract readable text from this page.")
+        return {"success": True, "title": title, "url": url, "text": text[:8000], "chars": len(text)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"URL fetch failed: {e}")
+
+
+@app.post("/api/extract-youtube")
+async def extract_youtube(req: dict):
+    """Fetch a YouTube transcript and return it as source_text."""
+    url = (req.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+    import re as _re
+    m = _re.search(r"(?:v=|youtu\.be/|/embed/|/shorts/)([A-Za-z0-9_-]{11})", url)
+    if not m:
+        raise HTTPException(status_code=400, detail="Could not detect a YouTube video id in that URL.")
+    video_id = m.group(1)
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        chunks = YouTubeTranscriptApi.get_transcript(video_id)
+        text = " ".join(c.get("text", "") for c in chunks).strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="Transcript was empty.")
+        return {"success": True, "video_id": video_id, "url": url, "text": text[:8000], "chars": len(text)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"YouTube transcript fetch failed: {e}")
 
 
 # ── MCP Tools ─────────────────────────────────────────────────────────────────
