@@ -183,6 +183,7 @@ CRITICAL RULES:
 4. Fill-in-blank sentences must be at Grade {req.grade_level} reading level: {p['sentence']}
 5. Sentence writing hints must be Grade {req.grade_level} appropriate: {p['hint_style']}
 6. Do NOT use words from other grade levels. Do NOT use placeholder words like 'word1'.
+{"7. SOURCE MATERIAL is provided above and is the AUTHORITATIVE basis for this worksheet. EVERY vocabulary word MUST be picked from words that actually appear in the SOURCE MATERIAL — do NOT introduce vocabulary that is not present in the source. Definitions must reflect how the word is used in the source. Fill-in-blank sentences must mirror the source's topic/context." if req.source_text else ""}
 {extra_instructions}
 
 Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
