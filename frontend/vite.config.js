@@ -11,9 +11,11 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/index.js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name].[ext]',
+        // Hashed filenames so the browser never serves a stale bundle after
+        // a deploy.
+        entryFileNames: 'assets/index-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       }
     }
   }
