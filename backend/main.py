@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -20,6 +20,8 @@ from database import (init_db, create_session, save_worksheet,
 from rag import rag_retriever
 from nlp_adapter import get_grade_prompt_context, analyze_text_grade, GRADE_PROFILES, get_word_count
 from mcp_tools import MCP_TOOLS, execute_mcp_tool
+from security import (assert_public_url, read_upload_capped, client_ip,
+                      generate_limiter, extract_limiter, upload_limiter)
 
 load_dotenv()
 
@@ -60,11 +62,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Vocabulary Mastery Worksheet Tool", version="1.0.0", lifespan=lifespan)
 
+# Allow this tool's own Render origin (same-origin SPA) plus localhost for
+# dev. Wildcard origin used to be allowed, which meant anyone could
+# cross-origin POST to the generate endpoint and drain the Groq quota.
+# Override at deploy time with ALLOWED_ORIGINS="https://x.com,https://y.com"
+# if you ever need to embed the API on another domain.
+_default_origins = "https://vocabulary-mastery-tool.onrender.com,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -142,7 +152,11 @@ def _validate_vocab(data: dict, min_items: int = 8) -> "str | None":
 
 
 @app.post("/api/vocabulary/generate")
-async def generate_worksheet(req: WorksheetRequest):
+async def generate_worksheet(req: WorksheetRequest, request: Request):
+    # Rate-limit the most-expensive endpoint per-IP — 15 generates / minute.
+    # Without this, an attacker who finds the Render URL can drain the Groq
+    # daily token quota in a loop with no auth in front of the API.
+    await generate_limiter.check(client_ip(request))
     session_id = req.session_id or create_session()
 
     rag_retriever.build_index()
@@ -449,8 +463,12 @@ async def add_rag_text(req: RAGDocRequest):
 
 
 @app.post("/api/rag/add-file")
-async def add_rag_file(file: UploadFile = File(...)):
-    raw = await file.read()
+async def add_rag_file(request: Request, file: UploadFile = File(...)):
+    await upload_limiter.check(client_ip(request))
+    # Stream-read with a 10MB cap. Previously `await file.read()` buffered the
+    # entire upload in memory before any size check — a 2GB POST would OOM
+    # the Render container before the endpoint could even reject it.
+    raw = await read_upload_capped(file)
     content = ""
     if file.filename.endswith(".pdf"):
         import pypdf
@@ -477,19 +495,23 @@ async def add_rag_file(file: UploadFile = File(...)):
 
 
 @app.post("/api/extract-url")
-async def extract_url(req: dict):
+async def extract_url(req: dict, request: Request):
     """Fetch a webpage and return cleaned text as source_text."""
-    url = (req.get("url") or "").strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="url is required")
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
+    await extract_limiter.check(client_ip(request))
+    # SSRF guard: reject loopback, RFC1918, AWS metadata, IPv6 ULA, etc.
+    # Without this, a teacher (or a curl user) could submit
+    # http://169.254.169.254/latest/meta-data/iam and exfiltrate the
+    # Render/AWS service identity from the container.
+    url = assert_public_url((req.get("url") or "").strip())
     try:
         import httpx, re as _re
         from bs4 import BeautifulSoup
         async with httpx.AsyncClient(follow_redirects=True, timeout=20.0,
             headers={"User-Agent": "Mozilla/5.0 (compatible; VocabularyTool/1.0)"}) as cx:
             r = await cx.get(url)
+            # Re-validate the FINAL URL after redirects so an attacker can't
+            # bounce through a public host into a private one.
+            assert_public_url(str(r.url))
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
             for bad in soup(["script", "style", "noscript", "iframe", "nav", "footer", "header", "form", "aside"]):
@@ -503,12 +525,20 @@ async def extract_url(req: dict):
         return {"success": True, "title": title, "url": url, "text": text[:8000], "chars": len(text)}
     except HTTPException:
         raise
+    except httpx.HTTPStatusError as e:
+        # Surface upstream 4xx as 4xx (not a generic 500) so the UI can
+        # tell the teacher "that page returned 404", not "server error".
+        raise HTTPException(status_code=e.response.status_code,
+                            detail=f"URL fetch failed: {e.response.status_code} {e.response.reason_phrase}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach URL: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"URL fetch failed: {e}")
 
 
 @app.post("/api/auto-fields")
-async def auto_fields(req: dict):
+async def auto_fields(req: dict, request: Request):
+    await extract_limiter.check(client_ip(request))
     """Read uploaded text and propose a Topic + Learning Objective + grade.
 
     Saves the teacher from typing — they upload a PDF / URL / YouTube
@@ -641,7 +671,8 @@ async def _youtube_metadata_fallback(video_id: str, url: str) -> dict | None:
 
 
 @app.post("/api/extract-youtube")
-async def extract_youtube(req: dict):
+async def extract_youtube(req: dict, request: Request):
+    await extract_limiter.check(client_ip(request))
     """Fetch a YouTube transcript and return it as source_text. If YouTube
     blocks the transcript API (typical on cloud IPs), fall back to scraping
     the video's title + description."""

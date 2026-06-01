@@ -1,10 +1,20 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import DOMPurify from 'dompurify'
 import Sidebar from '../components/Sidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import EditorToolbar from '../components/EditorToolbar'
 import HistoryPopup from '../components/HistoryPopup'
+
+// Sanitize HTML before passing it to dangerouslySetInnerHTML. The HTML comes
+// from contentEditable serialization that includes LLM-generated text — a
+// poisoned source PDF/URL could prompt-inject the model into emitting
+// `<img src=x onerror=...>` inside a vocab definition; once the teacher
+// hits Save, the edited HTML becomes savedHTML and gets re-rendered on
+// every subsequent view, turning it into stored XSS. DOMPurify strips any
+// active script vectors before render.
+const sanitizeHTML = (html) => DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } })
 
 export default function ResultPage({ worksheet, formData, tabs, onNewTab, onCloseTab, onAdapt, onRemix, onLoadFromHistory, api }) {
   const [activeTabIdx, setActiveTabIdx] = useState(0)
@@ -113,10 +123,50 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
   const fib = ws.fill_in_blank || {}
   const sw = ws.sentence_writing || {}
 
-  const handleCopy = () => {
+  // Deterministic shuffle of the matching definitions. We previously did
+  // [...items].sort(() => Math.random() - 0.5) inline in JSX, which reshuffled
+  // on every render — students would write "1=C", toggle the answer key, and
+  // come back to find "C" pointing at a different definition. Cache the
+  // shuffled order in useMemo keyed by the items themselves so it only
+  // changes when the underlying worksheet changes.
+  const shuffledDefinitions = useMemo(() => {
+    const items = matching.items || []
+    const arr = items.map((item, i) => ({ ...item, _origIdx: i }))
+    // Fisher–Yates with a seed derived from the items so the order is stable
+    // for the same worksheet across renders.
+    const seed = items.map(it => (it.word || '') + '|' + (it.definition || '')).join(';')
+    let h = 0
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+    const rand = () => { h = (h * 1103515245 + 12345) & 0x7fffffff; return h / 0x7fffffff }
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }, [matching.items])
+
+  const handleCopy = async () => {
     const text = contentRef.current?.innerText || ''
-    navigator.clipboard.writeText(text)
-    alert('Copied to clipboard!')
+    try {
+      // navigator.clipboard is undefined on non-HTTPS origins (e.g. http://
+      // LAN deploys). Fall back to a textarea + execCommand so the button
+      // doesn't silently fail.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.left = '-9999px'
+        document.body.appendChild(ta)
+        ta.focus(); ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      setToast({ type: 'success', message: 'Copied to clipboard' })
+    } catch (e) {
+      setToast({ type: 'error', message: 'Copy failed — please select and copy manually' })
+    }
   }
 
   const handlePdf = async () => {
@@ -247,18 +297,17 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                 ref={editableRef}
                 contentEditable
                 suppressContentEditableWarning
-                dangerouslySetInnerHTML={{ __html: editableHTML || '' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHTML(editableHTML) }}
                 className="bg-white rounded-xl shadow-sm border-2 border-dashed border-orange-400 p-10 min-h-[800px] focus:outline-none"
               />
             ) : savedHTML ? (
               <div
                 ref={contentRef}
-                dangerouslySetInnerHTML={{ __html: savedHTML }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHTML(savedHTML) }}
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
               />
             ) : (
             <div
-              key={showAnswers}
               ref={contentRef}
               className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 min-h-[800px]"
             >
@@ -300,10 +349,10 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                     ))}
                   </tbody>
                 </table>
-                {/* Definitions (shuffled) */}
+                {/* Definitions (shuffled — stable for the same worksheet) */}
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {[...(matching.items || [])].sort(() => Math.random() - 0.5).map((item, i) => (
-                    <div key={i} className="text-sm text-gray-600">
+                  {shuffledDefinitions.map((item, i) => (
+                    <div key={item._origIdx} className="text-sm text-gray-600">
                       <span className="font-semibold text-gray-400">{String.fromCharCode(65 + i)}.</span> {item.definition}
                     </div>
                   ))}
