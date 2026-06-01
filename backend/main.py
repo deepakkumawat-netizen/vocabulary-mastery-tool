@@ -123,6 +123,59 @@ async def list_worksheets(limit: int = 20):
 
 # ── Generate ──────────────────────────────────────────────────────────────────
 
+def _count_syllables(word: str) -> int:
+    """Rough syllable counter — vowel groups, minus silent terminal 'e'."""
+    import re as _re
+    word = (word or "").lower().strip(".,!?;:'\"")
+    if not word:
+        return 1
+    count = len(_re.findall(r'[aeiouy]+', word))
+    if word.endswith('e') and count > 1:
+        count -= 1
+    return max(count, 1)
+
+
+# Per-grade complexity caps for vocabulary words. The GRADE_PROFILES are
+# instructive in the prompt but the model doesn't always follow them — at
+# Grade 1 it will happily emit "photosynthesis" if the source PDF mentions
+# it. This dict gives us a hard post-generation check so we can reject and
+# retry with stricter instructions. Only applied to Grade 1-3 — older
+# grades can handle whatever the LLM produces.
+GRADE_VOCAB_CAPS = {
+    1: {"max_syllables": 2, "max_chars": 7},
+    2: {"max_syllables": 3, "max_chars": 8},
+    3: {"max_syllables": 3, "max_chars": 9},
+}
+
+
+def _check_grade_complexity(data: dict, grade_level: int) -> "str | None":
+    """For Grade 1-3, reject vocabulary words that are too long/complex.
+
+    Returns an error string describing the offending words so the retry
+    prompt can tell the model EXACTLY which words to swap out. Returning
+    None means the generated content is grade-appropriate (or grade is
+    high enough that we don't enforce this check).
+    """
+    caps = GRADE_VOCAB_CAPS.get(grade_level)
+    if not caps:
+        return None
+    too_complex = []
+    for vw in data.get("vocab_words", []):
+        word = (vw.get("word") or "").strip().lower()
+        if not word:
+            continue
+        if _count_syllables(word) > caps["max_syllables"] or len(word) > caps["max_chars"]:
+            too_complex.append(word)
+    if too_complex:
+        return (
+            f"Grade {grade_level} vocabulary must be at most {caps['max_syllables']} syllables and "
+            f"{caps['max_chars']} letters per word. These words are too complex: "
+            f"{', '.join(too_complex[:5])}. REPLACE each one with a simpler Grade {grade_level} word "
+            f"on the same topic (1-2 syllable sight word, CVC pattern, decodable phonics)."
+        )
+    return None
+
+
 def _validate_vocab(data: dict, min_items: int = 8) -> "str | None":
     """Return an error description string if the worksheet JSON is invalid, else None.
     `min_items` is the grade-calibrated minimum number of words/sentences/prompts."""
@@ -327,6 +380,18 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
                     f"Ensure vocab_words has exactly {_n} items, matching_section has {_n} items, "
                     f"fill_in_blank has exactly {_n} sentences, and sentence_writing has exactly {_n} prompts.\n"
                 )
+                continue
+
+            # For young grades, reject worksheets whose vocab words exceed
+            # the syllable/length caps. The model often pulls complex words
+            # straight from the source PDF (e.g. "photosynthesis" for a
+            # Grade 1 student) even with the NLP calibration in the
+            # prompt — this is the post-generation enforcement step.
+            complexity_error = _check_grade_complexity(data, req.grade_level)
+            if complexity_error:
+                last_reason = f"Grade-complexity failed: {complexity_error}"
+                yield _sse({"type": "status", "message": "Words too complex for the grade — regenerating with simpler vocabulary…"})
+                extra_instructions = complexity_error + "\n"
                 continue
 
             # All checks passed — save and emit complete event
