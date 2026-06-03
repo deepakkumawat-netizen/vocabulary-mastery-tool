@@ -637,8 +637,12 @@ async def hero_image(request: Request, seed: Optional[int] = None):
     try:
         import httpx
         async with httpx.AsyncClient(timeout=120.0) as cx:
+            # HF migrated from api-inference.huggingface.co (which now
+            # fails DNS from cloud hosts) to router.huggingface.co with
+            # provider-based routing. `hf-inference` is the first-party
+            # free provider; FLUX.1-schnell is hosted there.
             r = await cx.post(
-                "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+                "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
                 headers={
                     "Authorization": f"Bearer {hf_token}",
                     "Content-Type": "application/json",
