@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import HomePage from './pages/HomePage'
 import FormPage from './pages/FormPage'
 import ResultPage from './pages/ResultPage'
 import Landing from './Landing'
@@ -30,7 +29,11 @@ const BLOCKED_REGEX = new RegExp('\\b(?:' + BLOCKED_PATTERNS.join('|') + ')\\b',
 const containsBlockedContent = (text = '') => BLOCKED_REGEX.test(text)
 
 export default function App() {
-  const [view, setView] = useState(() => localStorage.getItem('vocab_seen_landing') ? 'home' : 'landing')
+  // Two-screen flow: Landing (with Sign Up / Log In / Try it now) → Form.
+  // Skip Landing on subsequent visits if the user has signed up/logged in
+  // (AuthModal sets `vocab_user` in localStorage). "Try it now" doesn't
+  // set that, so guests see the Landing again next visit, which is fine.
+  const [view, setView] = useState(() => localStorage.getItem('vocab_user') ? 'form' : 'landing')
   const [sessionId, setSessionId] = useState(null)
   const [worksheet, setWorksheet] = useState(null)
   const [formData, setFormData] = useState({})
@@ -129,15 +132,12 @@ export default function App() {
   return (
     <div className="min-h-screen" style={{ background: '#FAF9F7', fontFamily: 'Inter, sans-serif' }}>
       {view === 'landing' && (
-        <Landing onEnter={() => { localStorage.setItem('vocab_seen_landing', '1'); setView('home') }} />
-      )}
-      {view === 'home' && (
-        <HomePage onStart={() => setView('form')} />
+        <Landing onEnter={() => setView('form')} />
       )}
       {view === 'form' && (
         <FormPage
           onGenerate={handleGenerate}
-          onBack={() => setView('home')}
+          onBack={() => setView('landing')}
           loading={loading}
           error={error}
           prefillData={prefillData}
@@ -167,7 +167,7 @@ export default function App() {
           onCloseTab={(idx) => {
             const newTabs = tabs.filter((_, i) => i !== idx)
             setTabs(newTabs)
-            if (newTabs.length === 0) setView('home')
+            if (newTabs.length === 0) setView('form')
           }}
           api={API}
         />
