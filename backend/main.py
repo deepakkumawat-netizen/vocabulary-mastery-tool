@@ -633,14 +633,14 @@ async def hero_image(request: Request, seed: Optional[int] = None):
     try:
         import httpx
         async with httpx.AsyncClient(timeout=60.0) as cx:
-            # Step 1: submit the generation task (NanoBanana Pro endpoint).
-            # Pro takes `resolution` (1K/2K/4K) and `aspectRatio` instead of
-            # the v1 type/numImages params. 1K @ 1:1 is plenty for the
-            # 800x800 hero slot and burns the least credits per call.
+            # Step 1: submit the generation task (NanoBanana v1 base).
+            # Pro burns several credits per image and the account currently
+            # has ~6 credits total. v1 gives ~1 image per credit, decent
+            # cartoon quality, plenty for landing-page hero use.
             r1 = await cx.post(
-                "https://api.nanobananaapi.ai/api/v1/nanobanana/generate-pro",
+                "https://api.nanobananaapi.ai/api/v1/nanobanana/generate",
                 headers={"Authorization": f"Bearer {nb_key}", "Content-Type": "application/json"},
-                json={"prompt": prompt, "resolution": "1K", "aspectRatio": "1:1"},
+                json={"prompt": prompt, "type": "TEXTTOIAMGE", "numImages": 1, "callBackUrl": ""},
             )
             if r1.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"NanoBanana submit returned {r1.status_code}")
