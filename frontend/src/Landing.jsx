@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const FEATURES = [
   { icon: '🎯', title: 'Grade-Calibrated Vocab', desc: 'Word lists and definitions automatically scaled to your students\' grade level.' },
@@ -92,6 +92,24 @@ function AuthModal({ mode, onClose, onSwitch, onEnter }) {
 
 export default function Landing({ onEnter }) {
   const [auth, setAuth] = useState(null)
+
+  // Hero image rotation — preload the next Pollinations seed and only swap
+  // the visible src once it's fully loaded, so the rectangle never blanks
+  // between rotations. Same pattern as AI Tutor / ClassroomAI / codekids.
+  const buildHeroUrl = (s) => `https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20cheerful%20student%20holding%20an%20open%20dictionary%20with%20glowing%20vocabulary%20words%20floating%20around%20like%20alphabet%20letters%20definitions%20and%20speech%20bubbles%2C%20colorful%20books%20and%20pencils%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20educational%20learning?width=768&height=768&seed=${s}&nologo=true`
+  const [heroUrl, setHeroUrl] = useState(buildHeroUrl(31))
+  useEffect(() => {
+    let seed = 31
+    const t = setInterval(() => {
+      seed += 1
+      const nextUrl = buildHeroUrl(seed)
+      const img = new Image()
+      img.onload = () => setHeroUrl(nextUrl)
+      img.src = nextUrl
+    }, 5000)
+    return () => clearInterval(t)
+  }, [])
+
   return (
     <div className="min-h-screen bg-orange-50/50">
       <header className="flex items-center justify-between px-[6vw] py-4 border-b border-orange-100 bg-white">
@@ -105,20 +123,31 @@ export default function Landing({ onEnter }) {
         </div>
       </header>
 
-      <section className="text-center px-[6vw] py-16 max-w-3xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5" style={{ background: '#FDE3CC', color: '#E85D04' }}>
-          <span className="w-2 h-2 rounded-full" style={{ background: '#E85D04' }} /> Worksheet Generator · K–12
+      <section className="px-[6vw] py-16 max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-10">
+        <div className="flex-1 min-w-0 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5" style={{ background: '#FDE3CC', color: '#E85D04' }}>
+            <span className="w-2 h-2 rounded-full" style={{ background: '#E85D04' }} /> Worksheet Generator · K–12
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4">
+            Build vocabulary worksheets<br />
+            <span style={{ color: '#E85D04' }}>in seconds.</span>
+          </h1>
+          <p className="text-base md:text-lg text-gray-600 max-w-xl md:mx-0 mx-auto mb-7 leading-relaxed">
+            Give your students grade-perfect vocabulary practice — matching, fill-in-blank, and sentence writing — all generated and graded automatically.
+          </p>
+          <div className="flex gap-3.5 justify-center md:justify-start flex-wrap">
+            <button onClick={() => setAuth('signup')} className="px-7 py-3.5 rounded-xl text-white font-bold text-base shadow-lg" style={{ background: '#E85D04' }}>Get Started Free →</button>
+            <button onClick={onEnter} className="px-7 py-3.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-bold text-base">Try it now</button>
+          </div>
         </div>
-        <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4">
-          Build vocabulary worksheets<br />
-          <span style={{ color: '#E85D04' }}>in seconds.</span>
-        </h1>
-        <p className="text-base md:text-lg text-gray-600 max-w-xl mx-auto mb-7 leading-relaxed">
-          Give your students grade-perfect vocabulary practice — matching, fill-in-blank, and sentence writing — all generated and graded automatically.
-        </p>
-        <div className="flex gap-3.5 justify-center flex-wrap">
-          <button onClick={() => setAuth('signup')} className="px-7 py-3.5 rounded-xl text-white font-bold text-base shadow-lg" style={{ background: '#E85D04' }}>Get Started Free →</button>
-          <button onClick={onEnter} className="px-7 py-3.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-bold text-base">Try it now</button>
+        <div className="flex-1 flex justify-center min-w-0">
+          <img
+            src={heroUrl}
+            alt="Student with dictionary and vocabulary words"
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            className="w-full max-w-md rounded-2xl shadow-xl transition-opacity duration-300"
+            style={{ aspectRatio: '1 / 1', background: 'linear-gradient(135deg, #FDE3CC, #fff7ee)' }}
+          />
         </div>
       </section>
 
