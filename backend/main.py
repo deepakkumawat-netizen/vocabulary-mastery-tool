@@ -597,6 +597,66 @@ async def add_rag_file(request: Request, file: UploadFile = File(...)):
     }
 
 
+# ── Hero image proxy ─────────────────────────────────────────────────────────
+# Frontend's Landing page asks for `/api/hero-image?seed=N` and gets back a
+# Pollinations.ai cartoon JPEG. The Pollinations secret key (`sk_...`) lives
+# in the POLLINATIONS_API_KEY env var on the server — it never reaches the
+# browser, so a teacher inspecting the page can't drain the account.
+
+VOCAB_HERO_PROMPTS = [
+    "3D Pixar cartoon of a smiling kid holding an open dictionary with glowing alphabet letters floating around them, bright cheerful colors, clean white background, educational illustration",
+    "3D Pixar cartoon of colorful ABC alphabet blocks stacked on a wooden desk with floating vocabulary words and a friendly pencil character, clean white background, educational",
+    "3D Pixar cartoon of a happy student with backpack holding stack of vocabulary flashcards with words like JOY HOPE WISE floating in air, bright colors, clean white background",
+    "3D Pixar cartoon of a giant magnifying glass examining a dictionary page with words leaping off the page in colorful 3D letters, clean white background, educational",
+    "3D Pixar cartoon of a friendly book character with arms and a smile teaching glowing speech bubbles with vocabulary words, classroom setting, clean white background",
+    "3D Pixar cartoon of a cute owl wearing graduation cap holding a dictionary surrounded by floating alphabet letters and stars, bright cheerful colors, clean white background",
+]
+
+
+@app.get("/api/hero-image")
+async def hero_image(request: Request, seed: Optional[int] = None):
+    """Proxy to Pollinations.ai — generates a cartoon hero image for the
+    Landing page. Frontend hits this with a random seed on every visit so
+    teachers see a fresh image each time."""
+    await extract_limiter.check(client_ip(request))
+    poll_key = (os.getenv("POLLINATIONS_API_KEY") or "").strip()
+    if not poll_key:
+        raise HTTPException(status_code=503, detail="POLLINATIONS_API_KEY not configured")
+
+    import random as _random
+    if seed is None:
+        seed = _random.randint(1, 999999)
+    prompt = VOCAB_HERO_PROMPTS[seed % len(VOCAB_HERO_PROMPTS)]
+
+    try:
+        import httpx, urllib.parse as _urlp
+        encoded = _urlp.quote(prompt)
+        url = (
+            f"https://gen.pollinations.ai/image/{encoded}"
+            f"?model=flux&width=800&height=800&seed={seed}&nologo=true"
+        )
+        async with httpx.AsyncClient(timeout=90.0) as cx:
+            r = await cx.get(url, headers={"Authorization": f"Bearer {poll_key}"})
+        if r.status_code == 402:
+            # Account out of pollen — surface clearly so the frontend can
+            # fall back to its gradient placeholder.
+            raise HTTPException(status_code=402, detail="Pollinations balance is empty. Top up at enter.pollinations.ai.")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Pollinations returned {r.status_code}")
+        from fastapi.responses import Response
+        return Response(
+            content=r.content,
+            media_type="image/jpeg",
+            # 5-minute cache so a quick refresh doesn't burn a fresh generation.
+            # Page reloads after that interval still trigger a new image.
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hero image generation failed: {e}")
+
+
 @app.post("/api/extract-url")
 async def extract_url(req: dict, request: Request):
     """Fetch a webpage and return cleaned text as source_text."""

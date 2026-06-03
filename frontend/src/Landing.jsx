@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 const FEATURES = [
   { icon: '🎯', title: 'Grade-Calibrated Vocab', desc: 'Word lists and definitions automatically scaled to your students\' grade level.' },
@@ -93,32 +93,16 @@ function AuthModal({ mode, onClose, onSwitch, onEnter }) {
 export default function Landing({ onEnter }) {
   const [auth, setAuth] = useState(null)
 
-  // Hero image rotation — themed photos from LoremFlickr (free, no key).
-  // Pollinations.ai used to power this but switched to a paid model and
-  // now returns 402 "Queue full for IP" on every Render request. The
-  // /g/ path forces grayscale-OFF, lock={seed} guarantees stable images
-  // per seed; different keyword combos give visual variety per rotation.
-  const HERO_KEYWORDS = [
-    'dictionary,books',
-    'student,vocabulary',
-    'classroom,reading',
-    'alphabet,letters',
-    'library,school',
-    'words,language',
-  ]
-  const buildHeroUrl = (i) => `https://loremflickr.com/800/800/${HERO_KEYWORDS[i % HERO_KEYWORDS.length]}?lock=${i}`
-  const [heroUrl, setHeroUrl] = useState(buildHeroUrl(0))
-  useEffect(() => {
-    let i = 0
-    const t = setInterval(() => {
-      i += 1
-      const nextUrl = buildHeroUrl(i)
-      const img = new Image()
-      img.onload = () => setHeroUrl(nextUrl)
-      img.src = nextUrl
-    }, 5000)
-    return () => clearInterval(t)
-  }, [])
+  // Hero image — fresh AI-generated Pixar-style cartoon on every visit.
+  // Flow: frontend → backend /api/hero-image (the Pollinations secret key
+  // lives in POLLINATIONS_API_KEY on the server, never reaches the browser).
+  // Backend proxies to Pollinations with a seed, returns the JPEG.
+  //
+  // Each page load picks a fresh random seed → fresh image. No rotation
+  // (that would cost ~$0.06 per 5-minute session at 12 rotations/min;
+  // one-per-visit is ~$0.001 per session).
+  const [heroSeed] = useState(() => Math.floor(Math.random() * 999999))
+  const heroUrl = `/api/hero-image?seed=${heroSeed}`
 
   return (
     <div className="min-h-screen bg-orange-50/50">
