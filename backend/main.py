@@ -617,73 +617,53 @@ VOCAB_HERO_PROMPTS = [
 
 @app.get("/api/hero-image")
 async def hero_image(request: Request, seed: Optional[int] = None):
-    """Proxy to NanoBanana — generates a cartoon hero image for the Landing
-    page. Frontend hits this with a random seed on every visit. Total time
-    ~15s (POST task + ~10s gen + fetch). 502 on timeout, 503 if no key."""
-    await extract_limiter.check(client_ip(request))
-    nb_key = (os.getenv("NANOBANANA_API_KEY") or "").strip()
-    if not nb_key:
-        raise HTTPException(status_code=503, detail="NANOBANANA_API_KEY not configured")
+    """Proxy to Hugging Face FLUX.1-schnell — fresh cartoon hero image per
+    visit. The HF token lives in HF_API_TOKEN on the server.
 
-    import random as _random, asyncio
+    Total time: ~5-10s warm, up to ~60s on cold start. The `x-wait-for-model`
+    header makes HF block until the model is loaded instead of returning
+    503 — better UX than the alternative (frontend shows gradient longer
+    but always gets an image)."""
+    await extract_limiter.check(client_ip(request))
+    hf_token = (os.getenv("HF_API_TOKEN") or "").strip()
+    if not hf_token:
+        raise HTTPException(status_code=503, detail="HF_API_TOKEN not configured")
+
+    import random as _random
     if seed is None:
         seed = _random.randint(1, 999999)
     prompt = VOCAB_HERO_PROMPTS[seed % len(VOCAB_HERO_PROMPTS)]
 
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=60.0) as cx:
-            # Step 1: submit the generation task (NanoBanana v1 base).
-            # Pro burns several credits per image and the account currently
-            # has ~6 credits total. v1 gives ~1 image per credit, decent
-            # cartoon quality, plenty for landing-page hero use.
-            r1 = await cx.post(
-                "https://api.nanobananaapi.ai/api/v1/nanobanana/generate",
-                headers={"Authorization": f"Bearer {nb_key}", "Content-Type": "application/json"},
-                json={"prompt": prompt, "type": "TEXTTOIAMGE", "numImages": 1, "callBackUrl": ""},
+        async with httpx.AsyncClient(timeout=120.0) as cx:
+            r = await cx.post(
+                "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+                headers={
+                    "Authorization": f"Bearer {hf_token}",
+                    "Content-Type": "application/json",
+                    "x-wait-for-model": "true",
+                    "Accept": "image/png",
+                },
+                json={"inputs": prompt, "parameters": {"seed": seed, "num_inference_steps": 4}},
             )
-            if r1.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"NanoBanana submit returned {r1.status_code}")
-            submit = r1.json()
-            if submit.get("code") != 200:
-                raise HTTPException(status_code=502, detail=f"NanoBanana error: {submit.get('msg', 'unknown')}")
-            task_id = submit.get("data", {}).get("taskId")
-            if not task_id:
-                raise HTTPException(status_code=502, detail="NanoBanana returned no taskId")
-
-            # Step 2: poll for completion (max ~50s — 10 tries × 5s)
-            result_url = None
-            for _ in range(10):
-                await asyncio.sleep(5)
-                r2 = await cx.get(
-                    f"https://api.nanobananaapi.ai/api/v1/nanobanana/record-info?taskId={task_id}",
-                    headers={"Authorization": f"Bearer {nb_key}"},
-                )
-                if r2.status_code != 200:
-                    continue
-                status = r2.json()
-                data = status.get("data") or {}
-                flag = data.get("successFlag")
-                if flag == 1:
-                    result_url = (data.get("response") or {}).get("resultImageUrl")
-                    break
-                if flag in (2, 3):
-                    raise HTTPException(status_code=502, detail=f"NanoBanana failed: {data.get('errorMessage', 'unknown')}")
-            if not result_url:
-                raise HTTPException(status_code=504, detail="NanoBanana didn't return an image within 50s")
-
-            # Step 3: fetch the resulting image bytes
-            r3 = await cx.get(result_url)
-            if r3.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"Result image fetch failed: {r3.status_code}")
-            from fastapi.responses import Response
-            return Response(
-                content=r3.content,
-                media_type=r3.headers.get("content-type", "image/png"),
-                # 1-hour cache — the result URL is stable once generated; cache
-                # to avoid re-burning credits on quick refreshes.
-                headers={"Cache-Control": "public, max-age=3600"},
-            )
+        if r.status_code == 503:
+            # Model still loading — surface clearly so frontend can show
+            # the gradient placeholder and the user can refresh in a bit.
+            raise HTTPException(status_code=503, detail="HF model is warming up; try again in 30s")
+        if r.status_code == 429:
+            raise HTTPException(status_code=429, detail="HF free-tier rate limit hit")
+        if r.status_code != 200:
+            # JSON error responses come through here
+            detail = r.text[:200] if r.text else f"HTTP {r.status_code}"
+            raise HTTPException(status_code=502, detail=f"HF returned {r.status_code}: {detail}")
+        from fastapi.responses import Response
+        return Response(
+            content=r.content,
+            media_type=r.headers.get("content-type", "image/png"),
+            # 1-hour cache — keeps repeated visits cheap.
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
     except HTTPException:
         raise
     except Exception as e:
