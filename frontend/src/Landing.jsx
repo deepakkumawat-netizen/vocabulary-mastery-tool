@@ -93,16 +93,26 @@ function AuthModal({ mode, onClose, onSwitch, onEnter }) {
 export default function Landing({ onEnter }) {
   const [auth, setAuth] = useState(null)
 
-  // Hero image rotation — preload the next Pollinations seed and only swap
-  // the visible src once it's fully loaded, so the rectangle never blanks
-  // between rotations. Same pattern as AI Tutor / ClassroomAI / codekids.
-  const buildHeroUrl = (s) => `https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20cheerful%20student%20holding%20an%20open%20dictionary%20with%20glowing%20vocabulary%20words%20floating%20around%20like%20alphabet%20letters%20definitions%20and%20speech%20bubbles%2C%20colorful%20books%20and%20pencils%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20educational%20learning?width=768&height=768&seed=${s}&nologo=true`
-  const [heroUrl, setHeroUrl] = useState(buildHeroUrl(31))
+  // Hero image rotation — themed photos from LoremFlickr (free, no key).
+  // Pollinations.ai used to power this but switched to a paid model and
+  // now returns 402 "Queue full for IP" on every Render request. The
+  // /g/ path forces grayscale-OFF, lock={seed} guarantees stable images
+  // per seed; different keyword combos give visual variety per rotation.
+  const HERO_KEYWORDS = [
+    'dictionary,books',
+    'student,vocabulary',
+    'classroom,reading',
+    'alphabet,letters',
+    'library,school',
+    'words,language',
+  ]
+  const buildHeroUrl = (i) => `https://loremflickr.com/800/800/${HERO_KEYWORDS[i % HERO_KEYWORDS.length]}?lock=${i}`
+  const [heroUrl, setHeroUrl] = useState(buildHeroUrl(0))
   useEffect(() => {
-    let seed = 31
+    let i = 0
     const t = setInterval(() => {
-      seed += 1
-      const nextUrl = buildHeroUrl(seed)
+      i += 1
+      const nextUrl = buildHeroUrl(i)
       const img = new Image()
       img.onload = () => setHeroUrl(nextUrl)
       img.src = nextUrl
@@ -141,13 +151,17 @@ export default function Landing({ onEnter }) {
           </div>
         </div>
         <div className="flex-1 flex justify-center min-w-0">
-          <img
-            src={heroUrl}
-            alt="Student with dictionary and vocabulary words"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-            className="w-full max-w-md rounded-2xl shadow-xl transition-opacity duration-300"
+          <div
+            className="w-full max-w-md rounded-2xl shadow-xl overflow-hidden"
             style={{ aspectRatio: '1 / 1', background: 'linear-gradient(135deg, #FDE3CC, #fff7ee)' }}
-          />
+          >
+            <img
+              src={heroUrl}
+              alt="Vocabulary learning"
+              onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+              className="w-full h-full object-cover transition-opacity duration-300"
+            />
+          </div>
         </div>
       </section>
 
