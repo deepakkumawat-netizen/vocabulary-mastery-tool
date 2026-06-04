@@ -333,6 +333,11 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
         extra_instructions = ""
         last_reason = ""
         model_idx = 0
+        # Count consecutive grade-complexity rejections. After the first,
+        # word-level swapping isn't enough — the topic itself is forcing
+        # advanced jargon, so the retry escalates to a topic-transformation
+        # directive instead of accumulating "too complex" word lists.
+        complexity_failures = 0
 
         for attempt in range(1, max_attempts + 1):
             if attempt > 1:
@@ -427,9 +432,24 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
             # prompt — this is the post-generation enforcement step.
             complexity_error = _check_grade_complexity(data, req.grade_level)
             if complexity_error:
+                complexity_failures += 1
                 last_reason = f"Grade-complexity failed: {complexity_error}"
                 yield _sse({"type": "status", "message": "Words too complex for the grade — regenerating with simpler vocabulary…"})
-                extra_instructions = complexity_error + "\n"
+                if complexity_failures >= 2:
+                    # Escalate: the topic itself is forcing advanced jargon.
+                    # Stop telling the model to "swap these specific words"
+                    # — instead force a topic transformation.
+                    extra_instructions = (
+                        f"CRITICAL ESCALATION — your last {complexity_failures} attempts all produced words too complex for "
+                        f"Grade {req.grade_level}. The PROBLEM is that you are pulling vocabulary straight from the topic '"
+                        f"{req.topic}'. STOP doing that. Instead: TRANSFORM the topic into Grade {req.grade_level} language. "
+                        f"Example: if the topic is 'Conversational AI Tutoring' you must teach it as 'Helpful robot friends "
+                        f"that talk and help you learn' — vocabulary: bot, talk, help, kind, ask, learn, fun, smart. "
+                        f"For Grade {req.grade_level}, EVERY vocab word must be 1-2 syllables AND ≤7 letters, decodable, "
+                        f"and from a 6-year-old's daily world. Do NOT include any technical jargon, even if it's in the topic name.\n"
+                    )
+                else:
+                    extra_instructions = complexity_error + "\n"
                 continue
 
             # All checks passed — save and emit complete event

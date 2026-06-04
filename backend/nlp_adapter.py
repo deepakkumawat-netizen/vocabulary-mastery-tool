@@ -170,8 +170,39 @@ def get_word_count(grade_level: int) -> int:
     return 10
 
 
+_GRADE_WORD_EXAMPLES = {
+    1: "cat, run, hop, big, red, fun, ask, help, kind, look, top, sit, bug, hot, mom, dad, win, play, sun, ten",
+    2: "robot, smile, learn, bring, share, write, friend, story, plant, color, happy, quick, sound, paper, dance",
+    3: "answer, learn, simple, helper, friend, listen, gentle, common, robot, machine, follow, smart, careful, picture, message",
+}
+
+_TOPIC_TRANSFORM_HINT = {
+    1: "If the requested topic uses advanced concepts (AI, algorithms, computing, biology, physics, business, etc.), you MUST simplify it into the immediate world of a 6-year-old. Example transformations: 'Conversational AI Tutoring' → 'Helpful robot friends that talk and help you learn' (words: bot, talk, help, kind, smart, fun, ask, learn); 'Photosynthesis' → 'How plants drink sunlight to grow' (words: sun, leaf, plant, grow, food); 'Machine Learning' → 'How robots learn like we do' (words: robot, learn, see, try, smart). Do not ever output the original advanced jargon as vocabulary — ALWAYS transform.",
+    2: "If the topic uses advanced concepts, simplify it into a 7-year-old's daily world. Use 1-2 syllable concrete words children encounter at home/school.",
+    3: "If the topic uses advanced concepts, anchor it in a 8-9 year-old's daily life. Use simple, concrete everyday words a Grade 3 student encounters in class.",
+}
+
+
 def get_grade_prompt_context(grade_level: int) -> str:
     p = GRADE_PROFILES.get(grade_level, GRADE_PROFILES[7])
+
+    # For young grades, append explicit acceptable-word examples and a
+    # topic-transformation directive. Without these, the LLM keeps emitting
+    # advanced topic-jargon (interface, algorithm, authenticate) for a
+    # Grade 1 student because the topic vocabulary forces it — the
+    # post-generation cap then rejects every attempt and the retry loop
+    # exhausts. Providing concrete acceptable examples and an explicit
+    # "transform the topic" instruction breaks that loop.
+    extra_blocks = []
+    if grade_level in _GRADE_WORD_EXAMPLES:
+        extra_blocks.append(
+            f"\nACCEPTABLE WORD STYLE (use this shape — 1-2 syllables, ≤7 letters, decodable):\n"
+            f"  {_GRADE_WORD_EXAMPLES[grade_level]}"
+        )
+    if grade_level in _TOPIC_TRANSFORM_HINT:
+        extra_blocks.append(f"\nTOPIC TRANSFORMATION (CRITICAL):\n  {_TOPIC_TRANSFORM_HINT[grade_level]}")
+    extras = "".join(extra_blocks)
+
     return f"""=== GRADE {grade_level} NLP CALIBRATION REQUIREMENTS ===
 You MUST follow every rule below. Content that violates any rule is unacceptable.
 
@@ -195,7 +226,7 @@ SENTENCE WRITING HINTS:
   Format: {p['hint_style']}
 
 EXAMPLES IN CONTEXT:
-  {p['example_style']}
+  {p['example_style']}{extras}
 === END GRADE {grade_level} REQUIREMENTS ==="""
 
 
