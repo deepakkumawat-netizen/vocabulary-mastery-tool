@@ -53,10 +53,23 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
     setTimeout(() => setToast(null), 3000)
   }
 
+  // Capture whatever is currently in the contentEditable div and commit it
+  // as savedHTML. Called whenever the user exits edit mode by any path
+  // (sidebar action, Answer Key toggle, etc.) so edits are never silently
+  // lost. Without this auto-save, the only way to persist edits was the
+  // toolbar's "✓ Done Editing" button — easy to miss.
+  const autoSaveEdits = () => {
+    const currentEdit = editableRef.current?.innerHTML
+    if (currentEdit) setSavedHTML(currentEdit)
+  }
+
   const handleSidebarAction = (label) => {
     // Any action other than toggling Edit must first leave edit mode, otherwise
     // the editable overlay stays on top and the action appears to do nothing.
+    // AUTO-SAVE the current edits before exiting — the previous code dropped
+    // them silently if the user clicked anything other than "✓ Done Editing".
     if (label !== 'Edit' && isEditMode) {
+      autoSaveEdits()
       setIsEditMode(false)
     }
 
@@ -85,6 +98,8 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
         setActiveSidebar('Edit')
         setTimeout(() => { editableRef.current?.focus() }, 80)
       } else {
+        // Toggling Edit OFF — auto-save first so the user doesn't lose work
+        autoSaveEdits()
         setIsEditMode(false)
         setActiveSidebar(null)
       }
@@ -251,7 +266,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
       {/* Toolbar */}
       <div className="bg-white border-b border-gray-100 flex items-center gap-3 px-4 py-1 text-gray-500 text-xs">
         <button
-          onClick={() => { setIsEditMode(false); setShowAnswers(a => !a) }}
+          onClick={() => { if (isEditMode) autoSaveEdits(); setIsEditMode(false); setShowAnswers(a => !a) }}
           className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
             showAnswers
               ? 'border-orange-300 text-orange-600 bg-orange-50'
