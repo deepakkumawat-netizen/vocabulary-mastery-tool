@@ -189,19 +189,40 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
   const handlePdf = async () => {
     const element = contentRef.current
     if (!element) return
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true })
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    const imgHeight = (canvas.height * pageWidth) / canvas.width
-    let y = 0
-    while (y < imgHeight) {
-      pdf.addImage(imgData, 'PNG', 0, -y, pageWidth, imgHeight)
-      if (y + pageHeight < imgHeight) pdf.addPage()
-      y += pageHeight
+
+    // Add print-mode class so screen-only decorations (orange 'Write the
+    // missing word' badges, colored answer pills, contentEditable dashed
+    // underlines) get hidden or restyled into plain printable form. The
+    // class is added just before html2canvas captures, then removed.
+    element.classList.add('pdf-export-mode')
+    // Force browser to reflow with the new class before capturing
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      // Apply small print margins (10mm) so content doesn't touch the edge
+      const margin = 10
+      const usableWidth = pageWidth - margin * 2
+      const imgHeight = (canvas.height * usableWidth) / canvas.width
+      let y = 0
+      while (y < imgHeight) {
+        pdf.addImage(imgData, 'PNG', margin, margin - y, usableWidth, imgHeight)
+        if (y + (pageHeight - margin * 2) < imgHeight) pdf.addPage()
+        y += pageHeight - margin * 2
+      }
+      const suffix = showAnswers ? '_answer-key' : '_student'
+      pdf.save(`vocabulary_${formData.topic || 'worksheet'}${suffix}.pdf`)
+    } finally {
+      element.classList.remove('pdf-export-mode')
     }
-    pdf.save(`vocabulary_${formData.topic || 'worksheet'}.pdf`)
   }
 
   const handleDocx = async () => {
@@ -222,6 +243,41 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
 
   return (
     <div className="flex flex-col h-screen" style={{ background: '#FAF9F7' }}>
+
+      {/* PDF print-mode styles — applied only when the contentRef element
+          has the .pdf-export-mode class (added by handlePdf during capture,
+          removed after). Strips screen-only decorations so the PDF looks
+          like a traditional printed worksheet:
+            - Hides 'Write the missing word' colored badges
+            - Hides contentEditable dashed underlines (would print as
+              fake-looking dashed lines)
+            - Removes colored backgrounds on the amber answer pills
+              so they print as plain bracketed text
+            - Removes the orange tinted Word Bank box border so it's
+              plain white-on-paper */}
+      <style>{`
+        .pdf-export-mode [contenteditable="true"] {
+          border: none !important;
+          background: transparent !important;
+          min-height: 16px;
+        }
+        .pdf-export-mode .pdf-hide,
+        .pdf-export-mode [data-pdf-hide="true"] {
+          display: none !important;
+        }
+        .pdf-export-mode .bg-orange-50,
+        .pdf-export-mode .bg-amber-50 {
+          background: transparent !important;
+        }
+        .pdf-export-mode .border-orange-200,
+        .pdf-export-mode .border-amber-200 {
+          border-color: #999 !important;
+        }
+        .pdf-export-mode .rounded-full,
+        .pdf-export-mode .rounded-md {
+          border-radius: 3px !important;
+        }
+      `}</style>
 
       {/* Top bar with tabs + export */}
       <div className="bg-white border-b border-gray-200 flex items-center px-4 gap-2" style={{ minHeight: 44 }}>
@@ -410,7 +466,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                       )}
                       {!showAnswers && (
                         <div className="mt-1">
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
+                          <span data-pdf-hide="true" className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
                             Write the missing word
                           </span>
                           <div contentEditable suppressContentEditableWarning className="min-h-[28px] mt-1 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
@@ -440,7 +496,7 @@ export default function ResultPage({ worksheet, formData, tabs, onNewTab, onClos
                         </div>
                       ) : (
                         <div className="mt-2">
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
+                          <span data-pdf-hide="true" className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" style={{ color: '#E85D04' }}>
                             Word limit: up to {wordLimit} words
                           </span>
                           <div contentEditable suppressContentEditableWarning className="min-h-[32px] mt-2 px-1 text-sm text-gray-800 border-b-2 border-dashed border-gray-300 focus:outline-none focus:border-orange-400" />
