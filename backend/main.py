@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from groq import Groq
+import gemini_fallback
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -25,13 +26,34 @@ from security import (assert_public_url, read_upload_capped, client_ip,
 
 load_dotenv()
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+# Groq decommissioned every llama-3.x / gemma2 / llama-4-scout id (they now
+# return 404 model_not_found). These are the live ones -- do not reintroduce
+# the old names. Best quality first, lighter model as the rate-limit escape.
 GROQ_FALLBACK_MODELS = [
     GROQ_MODEL,
-    "llama-3.1-8b-instant",
-    "deepseek-r1-distill-llama-70b",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
+    os.getenv("GROQ_MODEL_FAST", "openai/gpt-oss-20b"),
+    GROQ_VISION_MODEL,
 ]
+# Gemini rotation: appended to the same chain, so when every Groq model has
+# failed the retry loop rolls straight on to Gemini instead of giving up.
+if gemini_fallback.is_configured():
+    GROQ_FALLBACK_MODELS += gemini_fallback.MODELS
+# openai/gpt-oss-* are reasoning models: hidden thinking tokens are charged
+# against max_tokens, so a tight budget returns empty content with
+# finish_reason="length". Ask for the shortest reasoning and add headroom.
+REASONING_RESERVE = 512
+
+
+def groq_kwargs(model: str, **kw) -> dict:
+    if model.startswith("openai/gpt-oss"):
+        kw.setdefault("reasoning_effort", "low")
+        if kw.get("max_tokens"):
+            kw["max_tokens"] = int(kw["max_tokens"]) + REASONING_RESERVE
+    return kw
+
+
 _groq_client = None
 
 
@@ -350,19 +372,30 @@ Return ONLY valid JSON. No markdown fences. No prose outside the JSON.
             collected_chunks = []
 
             try:
-                stream = get_groq_client().chat.completions.create(
-                    model=current_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=4500,
-                    stream=True,
-                )
+                if current_model.startswith("gemini"):
+                    # Gemini rotation: REST, no token streaming, so emit the
+                    # finished text as a single token event.
+                    text = gemini_fallback.complete(
+                        [{"role": "user", "content": prompt}],
+                        temperature=0.7, max_tokens=4500,
+                    )
+                    collected_chunks.append(text)
+                    yield _sse({"type": "token", "content": text})
+                else:
+                    stream = get_groq_client().chat.completions.create(
+                        **groq_kwargs(current_model),
+                        model=current_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7,
+                        max_tokens=4500,
+                        stream=True,
+                    )
 
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content or ""
-                    if delta:
-                        collected_chunks.append(delta)
-                        yield _sse({"type": "token", "content": delta})
+                    for chunk in stream:
+                        delta = chunk.choices[0].delta.content or ""
+                        if delta:
+                            collected_chunks.append(delta)
+                            yield _sse({"type": "token", "content": delta})
 
             except Exception as exc:
                 last_reason = str(exc)
@@ -770,6 +803,7 @@ async def auto_fields(req: dict, request: Request):
     try:
         client = get_groq_client()
         completion = client.chat.completions.create(
+            **groq_kwargs(GROQ_MODEL),
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": "You return strict JSON. No markdown fences."},
